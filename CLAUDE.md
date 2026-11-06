@@ -10,3 +10,17 @@
 - Pre-releases use changesets pre mode (`npx changeset pre enter next`) and publish to the `next` dist-tag. No extra branch is needed.
 - After merging, push `main` to both `origin` and the `Backup` remote.
 - Delete feature branches after merge. GitHub deletes the `origin` branch automatically; delete the local one with `git branch -D` (squash merges leave it looking unmerged).
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues for DocCyblade/dcabsm, using the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Uses the five default labels: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
