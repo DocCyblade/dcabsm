@@ -39,8 +39,6 @@ export function unitTemplate(): string {
   const dir = `${INSTANCES_LOGICAL}/%i`;
   return `${HEADER}[Unit]
 Description=Actual Budget server (Instance %i)
-After=network-online.target
-Wants=network-online.target
 ConditionPathExists=!${dir}/.changing-release
 StartLimitIntervalSec=300
 StartLimitBurst=3

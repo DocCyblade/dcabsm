@@ -14,14 +14,18 @@ export interface Paths {
   acme: string;
   instances: string;
   releases: string;
-  /** Node's release signing keys, shipped with DCABSM (spec 3.3). */
+  /** Node's release signing keys, shipped inside the running DCABSM version (spec 3.1). */
   nodeKeyring: string;
   osRelease: string;
   /** Where a logical absolute path, such as the stored `backupDir`, lives under the root. */
   under(logical: string): string;
 }
 
-export function pathsUnder(root: string): Paths {
+/**
+ * `installDir` is the running version's own directory, `/opt/dcabsm/<ver>`. It isn't under the root in
+ * production, so main.ts derives it from where the bundle sits; tests pass a directory they own.
+ */
+export function pathsUnder(root: string, installDir: string): Paths {
   const under = (logical: string) => join(root, logical);
   const srv = under("srv/dcabsm");
   const etc = under("etc/dcabsm");
@@ -35,7 +39,7 @@ export function pathsUnder(root: string): Paths {
     acme: join(srv, "acme"),
     instances: join(srv, "instances"),
     releases: join(srv, "releases"),
-    nodeKeyring: under("opt/dcabsm/share/node-release-keys.gpg"),
+    nodeKeyring: join(installDir, "share/node-release-keys.gpg"),
     osRelease: under("etc/os-release"),
     under,
   };

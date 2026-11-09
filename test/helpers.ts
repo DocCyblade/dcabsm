@@ -50,7 +50,7 @@ export interface HarnessOptions {
 /** A Context on a temporary root with the faked command runner and fetcher (spec 13.1). */
 export async function harness(opts: HarnessOptions = {}): Promise<Harness> {
   const root = await mkdtemp(join(tmpdir(), "dcabsm-test-"));
-  const paths = pathsUnder(root);
+  const paths = pathsUnder(root, join(root, "opt/dcabsm/test"));
   const osRelease = opts.osRelease === undefined ? DEBIAN_13 : opts.osRelease;
   if (osRelease !== null) {
     await mkdir(dirname(paths.osRelease), { recursive: true });
