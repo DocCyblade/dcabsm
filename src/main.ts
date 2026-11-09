@@ -10,6 +10,9 @@ const code = await run(process.argv.slice(2), {
   fetcher: realFetcher,
   io: realIo(),
   uid: process.getuid?.() ?? -1,
+  arch: process.arch,
+  env: process.env,
+  now: () => new Date(),
 });
 
 process.exitCode = code;

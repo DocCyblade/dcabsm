@@ -3,18 +3,34 @@ import { join } from "node:path";
 /** Every path DCABSM touches, hung off one configurable root (spec 13.1). */
 export interface Paths {
   root: string;
+  etc: string;
   hostConfig: string;
   lock: string;
+  srv: string;
+  node: string;
+  acme: string;
   instances: string;
   releases: string;
+  osRelease: string;
+  /** Where a logical absolute path, such as the stored `backupDir`, lives under the root. */
+  under(logical: string): string;
 }
 
 export function pathsUnder(root: string): Paths {
+  const under = (logical: string) => join(root, logical);
+  const srv = under("srv/dcabsm");
+  const etc = under("etc/dcabsm");
   return {
     root,
-    hostConfig: join(root, "etc/dcabsm/dcabsm.json"),
-    lock: join(root, "run/lock/dcabsm.lock"),
-    instances: join(root, "srv/dcabsm/instances"),
-    releases: join(root, "srv/dcabsm/releases"),
+    etc,
+    hostConfig: join(etc, "dcabsm.json"),
+    lock: under("run/lock/dcabsm.lock"),
+    srv,
+    node: join(srv, "node"),
+    acme: join(srv, "acme"),
+    instances: join(srv, "instances"),
+    releases: join(srv, "releases"),
+    osRelease: under("etc/os-release"),
+    under,
   };
 }

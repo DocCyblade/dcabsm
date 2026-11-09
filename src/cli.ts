@@ -1,20 +1,12 @@
-import { access } from "node:fs/promises";
+import { exists } from "./fsutil.ts";
 import type { Context } from "./context.ts";
 import { Cancelled, CliError, EXIT_FAILURE, EXIT_OK, formatError, refusal } from "./errors.ts";
 import { helpLines } from "./help.ts";
 import { acquireLock } from "./lock.ts";
 import { logChange } from "./log.ts";
+import { hostNotices } from "./host/notices.ts";
 import { findNoun, findVerb, type Verb } from "./table.ts";
 import { versionLine } from "./version.ts";
-
-async function exists(path: string): Promise<boolean> {
-  try {
-    await access(path);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 function isChanging(verb: Verb, args: string[]): boolean {
   return typeof verb.changes === "function" ? verb.changes(args) : verb.changes === true;
@@ -75,6 +67,8 @@ async function dispatch(argv: string[], ctx: Context): Promise<number> {
   }
 
   const args = rest;
+  if (!(noun.name === "host" && verb.name === "setup"))
+    await hostNotices(ctx, noun.name === "host" && verb.name === "doctor");
   const handler = verb.run;
   if (!handler) {
     throw new CliError(`${noun.name} ${verb.name} is not built yet.`, "See: dcabsm help");
