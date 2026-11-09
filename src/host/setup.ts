@@ -1,7 +1,7 @@
 import { isAbsolute } from "node:path";
 import { parseFlags } from "../args.ts";
 import type { Context } from "../context.ts";
-import { Cancelled, CliError, refusal } from "../errors.ts";
+import { Cancelled, CliError, firstLine, refusal } from "../errors.ts";
 import { ensureDir, exists } from "../fsutil.ts";
 import { logChange } from "../log.ts";
 import { step } from "../output.ts";
@@ -29,6 +29,7 @@ import {
   isNginxFile,
   pending,
   resolveDrift,
+  restoreNginxFiles,
   writeOwnedFiles,
 } from "./owned.ts";
 
@@ -129,6 +130,8 @@ export async function hostSetup({ ctx, args }: Invocation): Promise<void> {
     ownedWork.length === 0 &&
     !releasePlan
   ) {
+    // Nothing else to do, but Nginx must still be up and enabled (spec 10.2 step 7).
+    if (await keepNginxUp(ctx, flags.yes)) return;
     ctx.io.out("");
     ctx.io.out("Every check passes; nothing to do.");
     return;
@@ -149,7 +152,8 @@ export async function hostSetup({ ctx, args }: Invocation): Promise<void> {
       "info",
       `Write dcabsm@.service, dcabsm-nightly.timer (${nightlyTime}), Nginx conf.d files`,
     );
-  if (releasePlan) step(ctx, "info", `Install Actual ${releasePlan.version} with its Node runtime`);
+  if (releasePlan)
+    step(ctx, "info", `Install Release ${releasePlan.version} with its Node runtime`);
   await confirmOrCancel(ctx, "Go ahead?", { yes: flags.yes });
 
   if (missingPackages.length > 0) {
@@ -161,10 +165,8 @@ export async function hostSetup({ ctx, args }: Invocation): Promise<void> {
       ...missingPackages,
     ]);
     if (res.code !== 0) {
-      const reason =
-        res.stderr.split("\n").find((l) => l.trim() !== "") ?? `apt-get exited ${res.code}`;
       throw new CliError(
-        `apt could not install ${missingPackages.join(" and ")}: ${reason.trim()}`,
+        `apt could not install ${missingPackages.join(" and ")}: ${firstLine(res.stderr, `apt-get exited ${res.code}`)}`,
         "Fix the problem, then run again: sudo dcabsm host setup",
       );
     }
@@ -194,12 +196,58 @@ export async function hostSetup({ ctx, args }: Invocation): Promise<void> {
 async function systemctl(ctx: Context, ...args: string[]): Promise<void> {
   const res = await ctx.runner.run("systemctl", args);
   if (res.code !== 0) {
-    const reason = res.stderr.split("\n").find((l) => l.trim() !== "") ?? `exit ${res.code}`;
     throw new CliError(
-      `systemctl ${args.join(" ")} failed: ${reason.trim()}`,
+      `systemctl ${args.join(" ")} failed: ${firstLine(res.stderr, `exit ${res.code}`)}`,
       "Fix the problem, then run again: sudo dcabsm host setup",
     );
   }
+}
+
+const nginxIsActive = async (ctx: Context): Promise<boolean> =>
+  (await ctx.runner.run("systemctl", ["is-active", "--quiet", "nginx"])).code === 0;
+
+/** Whether Nginx is both running and enabled at boot. */
+async function nginxUp(ctx: Context): Promise<boolean> {
+  return (
+    (await nginxIsActive(ctx)) &&
+    (await ctx.runner.run("systemctl", ["is-enabled", "--quiet", "nginx"])).code === 0
+  );
+}
+
+/** The reason `nginx -t` fails, or undefined when it passes. */
+async function nginxTestFailure(ctx: Context): Promise<string | undefined> {
+  const test = await ctx.runner.run("nginx", ["-t"]);
+  return test.code === 0 ? undefined : firstLine(test.stderr, "no reason given");
+}
+
+/** Starts and enables a stopped Nginx, asking first if it was installed before setup ran. */
+async function startNginx(
+  ctx: Context,
+  opts: { wasInstalled: boolean; yes?: boolean },
+): Promise<void> {
+  if (opts.wasInstalled) {
+    const start = await confirm(ctx, "Nginx is installed but stopped. Start and enable it?", {
+      yes: opts.yes,
+      defaultYes: true,
+    });
+    if (!start) throw new Cancelled("Nginx left stopped. Run setup again to start it.");
+  }
+  await systemctl(ctx, "enable", "--now", "nginx");
+  step(ctx, "done", "Nginx: nginx -t passed, started, enabled");
+}
+
+/** Spec 10.2 step 7 on a re-run with nothing else to do: Nginx must still be up and enabled. */
+async function keepNginxUp(ctx: Context, yes?: boolean): Promise<boolean> {
+  if (await nginxUp(ctx)) return false;
+  const reason = await nginxTestFailure(ctx);
+  if (reason !== undefined) {
+    throw new CliError(
+      `nginx -t failed: ${reason}`,
+      "Nginx was not started. Fix the config, then run again: sudo dcabsm host setup",
+    );
+  }
+  await startNginx(ctx, { wasInstalled: true, yes });
+  return true;
 }
 
 /** Step 7 of spec 10.2: units, `conf.d` files, `nginx -t`, Nginx up and enabled, timer enabled. */
@@ -211,41 +259,44 @@ async function installOwnedFiles(
 ): Promise<void> {
   const result = await writeOwnedFiles(ctx, inspected, replace, opts.hashes);
   const config = (await readHostConfig(ctx)) ?? {};
+  const nginxWritten = result.written.filter((p) =>
+    isNginxFile(inspected.find((i) => i.file.path === p)!.file),
+  );
+
+  // Nginx files count only once `nginx -t` passes; until then no hash is recorded (spec 10.5).
+  const reason = await nginxTestFailure(ctx);
+  if (reason !== undefined) {
+    const hashes = await restoreNginxFiles(
+      ctx,
+      inspected,
+      nginxWritten,
+      opts.hashes,
+      result.hashes,
+    );
+    await writeHostConfig(ctx, { ...config, ownedFiles: hashes });
+    throw new CliError(
+      `nginx -t failed after the change: ${reason}`,
+      nginxWritten.length > 0
+        ? "The previous Nginx files were put back and Nginx was not reloaded. Fix the problem, then run again: sudo dcabsm host setup"
+        : "Nginx was not reloaded. Fix the config, then run again: sudo dcabsm host setup",
+    );
+  }
   await writeHostConfig(ctx, { ...config, ownedFiles: result.hashes });
   if (result.written.length > 0) {
     step(ctx, "done", `Wrote ${result.written.map((p) => p.split("/").pop()).join(", ")}`);
   }
 
-  const nginxChanged = result.written.some((p) =>
-    isNginxFile(inspected.find((i) => i.file.path === p)!.file),
-  );
   await systemctl(ctx, "daemon-reload");
   await systemctl(ctx, "enable", "dcabsm-nightly.timer");
   await systemctl(ctx, "start", "dcabsm-nightly.timer");
   step(ctx, "done", "dcabsm-nightly.timer enabled");
 
-  const test = await ctx.runner.run("nginx", ["-t"]);
-  if (test.code !== 0) {
-    const reason = test.stderr.split("\n").find((l) => l.trim() !== "") ?? "no reason given";
-    throw new CliError(
-      `nginx -t failed after the change: ${reason.trim()}`,
-      "Nginx was not reloaded. Fix the config, then run again: sudo dcabsm host setup",
-    );
-  }
-  const active = (await ctx.runner.run("systemctl", ["is-active", "--quiet", "nginx"])).code === 0;
-  if (active) {
+  const nginxChanged = nginxWritten.length > 0;
+  if (await nginxIsActive(ctx)) {
     if (nginxChanged) await systemctl(ctx, "reload", "nginx");
     step(ctx, "done", `Nginx: nginx -t passed${nginxChanged ? ", reloaded" : ""}`);
     await systemctl(ctx, "enable", "nginx");
     return;
   }
-  if (opts.nginxWasInstalled) {
-    const start = await confirm(ctx, "Nginx is installed but stopped. Start and enable it?", {
-      yes: opts.yes,
-      defaultYes: true,
-    });
-    if (!start) throw new Cancelled("Nginx left stopped. Run setup again to start it.");
-  }
-  await systemctl(ctx, "enable", "--now", "nginx");
-  step(ctx, "done", "Nginx: nginx -t passed, started, enabled");
+  await startNginx(ctx, { wasInstalled: opts.nginxWasInstalled, yes: opts.yes });
 }

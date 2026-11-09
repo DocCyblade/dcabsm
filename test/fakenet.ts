@@ -22,6 +22,8 @@ export interface FakeNet {
   badChecksum: boolean;
   /** Make the native-module check fail. */
   nativeFails: boolean;
+  /** Directories whose native-module check fails, whatever `nativeFails` says. */
+  brokenDirs: string[];
   /** Everything fetched, in order. */
   fetched: string[];
   fetch(url: string): FetchResult | undefined;
@@ -50,6 +52,7 @@ export function fakeNet(overrides: Partial<FakeNet> = {}): FakeNet {
     badSignature: false,
     badChecksum: false,
     nativeFails: false,
+    brokenDirs: [],
     fetched: [],
     ...overrides,
     fetch(url) {
@@ -114,7 +117,7 @@ export function fakeNet(overrides: Partial<FakeNet> = {}): FakeNet {
         return ok();
       }
       if (command.endsWith("/bin/node") && args[0] === "-e") {
-        return net.nativeFails
+        return net.nativeFails || net.brokenDirs.some((d) => args[2]!.startsWith(d))
           ? { code: 1, stdout: "", stderr: "Error: Cannot find module 'better-sqlite3'" }
           : ok();
       }

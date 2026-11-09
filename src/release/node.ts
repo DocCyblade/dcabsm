@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readlink, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Context } from "../context.ts";
-import { CliError } from "../errors.ts";
+import { CliError, errorMessage } from "../errors.ts";
 import { exists } from "../fsutil.ts";
 import { step } from "../output.ts";
 import { NODE_CEILING } from "./constants.ts";
@@ -16,7 +16,7 @@ async function fetchOk(ctx: Context, url: string): Promise<Uint8Array> {
     res = await ctx.fetcher.fetch(url);
   } catch (err) {
     throw new CliError(
-      `Could not reach ${new URL(url).host}: ${err instanceof Error ? err.message : String(err)}`,
+      `Could not reach ${new URL(url).host}: ${errorMessage(err)}`,
       "Check the network, then run again.",
     );
   }
