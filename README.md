@@ -180,6 +180,7 @@ The Nightly run needs `dcabsm`, so its timer is switched off first. Instances, R
 - [GLOSSARY.md](GLOSSARY.md): the terms DCABSM uses, such as Release, Instance and Regroup.
 - [docs/adr/](docs/adr/): the reasons behind the larger choices.
 - [docs/roadmap.md](docs/roadmap.md): what isn't in V1 and might come later.
+- [docs/git-workflow.md](docs/git-workflow.md): branches, pull requests, merging and release tags.
 
 ## Licence
 

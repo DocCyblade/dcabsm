@@ -8,11 +8,7 @@ DocCyblade's Actual Budget Server Manager: a CLI that installs and maintains sev
 - `GLOSSARY.md`: the domain terms. Use them exactly as written, with their capitals, such as Release, Instance, Host and Regroup.
 - `docs/adr/`: the reasons behind the larger choices. Read the relevant ADR before changing something it covers.
 - `docs/roadmap.md`: what's out of V1. Don't build roadmap items unasked.
-
-## Branches
-- `main` is published and runs CI. Changes reach it only through a pull request (spec 13.3).
-- Jump-start work happens on `docs/v1-jumpstart` until it is ready to merge.
-- Remotes: `origin` (GitHub, public) and `Backup`. Push work branches to `Backup`. Push to `origin` only when asked.
+- `docs/git-workflow.md`: branches, PRs, merging, tags and remotes. Read it before any git work.
 
 ## Agent skills
 
