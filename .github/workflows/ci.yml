@@ -19,6 +19,8 @@ jobs:
         with:
           node-version-file: .node-version
           cache: npm
+      - name: Install bash-completion for the completion test
+        run: sudo apt-get update && sudo apt-get install -y bash-completion
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
@@ -27,3 +29,5 @@ jobs:
       - run: npm run build
       - name: Smoke test the bundle
         run: node dist/dcabsm.js --version
+      - name: The build leaves the completion script
+        run: test -s dist/share/bash-completion/completions/dcabsm
