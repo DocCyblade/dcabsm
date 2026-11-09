@@ -6,6 +6,13 @@ import { ensureDir, exists } from "../fsutil.ts";
 import { logChange } from "../log.ts";
 import { step } from "../output.ts";
 import { confirm, confirmOrCancel } from "../prompt.ts";
+import {
+  anyReleaseLoads,
+  checkReleaseVersion,
+  installRelease,
+  latestStable,
+  planRelease,
+} from "../release/install.ts";
 import type { Invocation } from "../table.ts";
 import type { InspectedFile } from "./owned.ts";
 import { isInstalled, runChecks, type CheckResult, type Override } from "./checks.ts";
@@ -34,7 +41,11 @@ interface Dir {
 
 /** `host setup` (spec 10.2), up to the Host tree: refusals, plan, apt, `dcabsm.json` and `/srv/dcabsm`. */
 export async function hostSetup({ ctx, args }: Invocation): Promise<void> {
-  const flags = parseFlags(args, { yes: { type: "boolean" }, "backup-dir": { type: "string" } });
+  const flags = parseFlags(args, {
+    yes: { type: "boolean" },
+    "backup-dir": { type: "string" },
+    release: { type: "string" },
+  });
   const requested = flags["backup-dir"];
   if (requested !== undefined && !isAbsolute(requested)) {
     throw refusal(
@@ -42,6 +53,7 @@ export async function hostSetup({ ctx, args }: Invocation): Promise<void> {
       "Example: --backup-dir /mnt/backups/dcabsm",
     );
   }
+  if (flags.release !== undefined) checkReleaseVersion(flags.release);
   const stored = await readHostConfig(ctx);
 
   ctx.io.out("Setup checks (nothing changes yet)");
@@ -105,11 +117,17 @@ export async function hostSetup({ ctx, args }: Invocation): Promise<void> {
   );
   const ownedWork = pending(inspected);
 
+  // Step 8 passes once any Release loads, so a re-run never pulls a newer one (spec 10.2).
+  const releasePlan = (await anyReleaseLoads(ctx))
+    ? undefined
+    : await planRelease(ctx, flags.release ?? (await latestStable(ctx)));
+
   if (
     missingPackages.length === 0 &&
     missingDirs.length === 0 &&
     !needConfig &&
-    ownedWork.length === 0
+    ownedWork.length === 0 &&
+    !releasePlan
   ) {
     ctx.io.out("");
     ctx.io.out("Every check passes; nothing to do.");
@@ -131,6 +149,7 @@ export async function hostSetup({ ctx, args }: Invocation): Promise<void> {
       "info",
       `Write dcabsm@.service, dcabsm-nightly.timer (${nightlyTime}), Nginx conf.d files`,
     );
+  if (releasePlan) step(ctx, "info", `Install Actual ${releasePlan.version} with its Node runtime`);
   await confirmOrCancel(ctx, "Go ahead?", { yes: flags.yes });
 
   if (missingPackages.length > 0) {
@@ -169,6 +188,7 @@ export async function hostSetup({ ctx, args }: Invocation): Promise<void> {
       yes: flags.yes,
     });
   }
+  if (releasePlan) await installRelease(ctx, releasePlan);
 }
 
 async function systemctl(ctx: Context, ...args: string[]): Promise<void> {
