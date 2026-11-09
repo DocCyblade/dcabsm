@@ -32,7 +32,7 @@ describe("host setup on a clean Debian 13 VM", () => {
     expect(await setup(host)).toBe(0);
 
     expect(host.installed).toEqual(new Set(["nginx", "openssl"]));
-    expect(h.calls.find((c) => c.command === "env")?.args).toEqual([
+    expect(h.calls.find((c) => c.command === "env" && c.args.includes("apt-get"))?.args).toEqual([
       "DEBIAN_FRONTEND=noninteractive",
       "apt-get",
       "install",
@@ -111,7 +111,7 @@ describe("host setup re-run", () => {
     h.calls.length = 0;
     expect(await run(["host", "setup", "--yes"], h.ctx)).toBe(0);
     expect(h.out.at(-1)).toBe("Every check passes; nothing to do.");
-    expect(h.calls.some((c) => c.command === "env")).toBe(false);
+    expect(h.calls.some((c) => c.command === "env" && c.args.includes("apt-get"))).toBe(false);
     expect(await readFile(h.ctx.paths.hostConfig, "utf8")).toBe(before);
   });
 
@@ -127,7 +127,9 @@ describe("host setup re-run", () => {
 
     expect(await run(["host", "setup", "--yes"], h.ctx)).toBe(0);
     expect(await pathExists(h.ctx.paths.acme)).toBe(true);
-    expect(h.calls.find((c) => c.command === "env")?.args.slice(-1)).toEqual(["openssl"]);
+    expect(
+      h.calls.find((c) => c.command === "env" && c.args.includes("apt-get"))?.args.slice(-1),
+    ).toEqual(["openssl"]);
     expect(await readFile(instance + "/account.sqlite", "utf8")).toBe("mine");
   });
 
@@ -166,7 +168,7 @@ describe("refusals change nothing and exit 2", () => {
     expect(host.installed.size).toBe(0);
     expect(await pathExists(h.ctx.paths.etc)).toBe(false);
     expect(await pathExists(h.ctx.paths.srv)).toBe(false);
-    expect(h.calls.some((c) => c.command === "env")).toBe(false);
+    expect(h.calls.some((c) => c.command === "env" && c.args.includes("apt-get"))).toBe(false);
   };
 
   it("an OS that is not in the table", async () => {
@@ -362,6 +364,25 @@ describe("a Host that later runs an unsupported OS", () => {
     h.err.length = 0;
     await run(["instance", "list"], h.ctx);
     expect(h.err).toEqual(["error: instance list is not built yet.", "  See: dcabsm help"]);
+  });
+});
+
+describe("robustness", () => {
+  it("refuses a corrupt dcabsm.json instead of rewriting it", async () => {
+    const host = fakeHost();
+    await setup(host);
+    await writeFile(h.ctx.paths.hostConfig, "{oops");
+    expect(await run(["host", "setup", "--yes"], h.ctx)).toBe(2);
+    expect(await readFile(h.ctx.paths.hostConfig, "utf8")).toBe("{oops");
+  });
+
+  it("accepts the distro's Nginx whose binary was replaced by an upgrade", async () => {
+    const host = fakeHost({
+      listeners: 'LISTEN 0 511 0.0.0.0:80 0.0.0.0:* users:(("nginx",pid=77,fd=6))\n',
+      exe: { 77: "/usr/sbin/nginx (deleted)" },
+    });
+    host.installed.add("nginx");
+    expect(await setup(host)).toBe(0);
   });
 });
 

@@ -80,7 +80,7 @@ export function nginxOrgInPolicy(policy: string): boolean {
 }
 
 async function nginxOrgCheck(ctx: Context): Promise<CheckResult> {
-  const res = await ctx.runner.run("apt-cache", ["policy", "nginx"]);
+  const res = await ctx.runner.run("env", ["LC_ALL=C", "apt-cache", "policy", "nginx"]);
   if (nginxOrgInPolicy(res.stdout)) {
     return {
       kind: "refuse",
@@ -118,9 +118,11 @@ export function parseListeners(output: string): Listener[] {
 /** The distro's own Nginx is the one binary at /usr/sbin/nginx that the `nginx` package owns. */
 async function isDistroNginx(ctx: Context, pid: number): Promise<boolean> {
   const exe = await ctx.runner.run("readlink", ["-f", `/proc/${pid}/exe`]);
-  if (exe.stdout.trim() !== "/usr/sbin/nginx") return false;
-  const owner = await ctx.runner.run("dpkg", ["-S", "/usr/sbin/nginx"]);
-  return owner.code === 0 && owner.stdout.startsWith("nginx:");
+  // After an upgrade the kernel reports the replaced binary as "<path> (deleted)".
+  if (exe.stdout.trim().replace(/ \(deleted\)$/, "") !== "/usr/sbin/nginx") return false;
+  const owner = await ctx.runner.run("env", ["LC_ALL=C", "dpkg", "-S", "/usr/sbin/nginx"]);
+  const packages = owner.stdout.split(":")[0]?.split(", ") ?? [];
+  return owner.code === 0 && packages.some((p) => p === "nginx" || p === "nginx-core");
 }
 
 async function portsCheck(ctx: Context): Promise<CheckResult> {

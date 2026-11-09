@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { CliError, EXIT_USAGE } from "../errors.ts";
 import type { Context } from "../context.ts";
 import { writeFileAtomic } from "../fsutil.ts";
 import { LAYOUT } from "../version.ts";
@@ -31,20 +32,30 @@ export function defaultHostConfig(backupDir: string): HostConfig {
     nightlyTime: "03:30",
     keep: { scheduled: 14, "pre-upgrade": 5, "pre-restore": 5, "pre-clone": 5 },
     ownedFiles: {},
-    unsupportedHost: undefined,
   };
 }
 
-/** Reads what is stored, or undefined when the file is missing or isn't JSON. */
+/** Reads what is stored: undefined when there is no file, an error when it can't be read as settings. */
 export async function readHostConfig(ctx: Context): Promise<Partial<HostConfig> | undefined> {
+  let text: string;
   try {
-    const parsed: unknown = JSON.parse(await readFile(ctx.paths.hostConfig, "utf8"));
-    return typeof parsed === "object" && parsed !== null
-      ? (parsed as Partial<HostConfig>)
-      : undefined;
+    text = await readFile(ctx.paths.hostConfig, "utf8");
   } catch {
     return undefined;
   }
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+      return parsed as Partial<HostConfig>;
+    }
+  } catch {
+    // Falls through to the error below.
+  }
+  throw new CliError(
+    "/etc/dcabsm/dcabsm.json is not valid JSON.",
+    "Setup won't overwrite it. Restore it from a copy or fix it by hand, then run again.",
+    EXIT_USAGE,
+  );
 }
 
 export async function writeHostConfig(ctx: Context, config: Partial<HostConfig>): Promise<void> {

@@ -46,6 +46,7 @@ export function fakeHost(overrides: Partial<FakeHost> = {}): FakeHost {
     exe: {},
     ...overrides,
     run(command, args) {
+      if (command === "env" && args[0] === "LC_ALL=C") return host.run(args[1]!, args.slice(2));
       const line = [command, ...args].join(" ");
       if (command === "systemd-detect-virt") {
         return host.container === "none" ? fail("", 1, "none") : ok(host.container);
