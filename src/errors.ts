@@ -32,3 +32,13 @@ export function formatError(err: CliError): string[] {
   if (err.hint) lines.push(`  ${err.hint}`);
   return lines;
 }
+
+/** The text of a thrown value. */
+export function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/** The first non-blank line of a program's stderr, trimmed, or `fallback` when there is none. */
+export function firstLine(text: string, fallback: string): string {
+  return (text.split("\n").find((l) => l.trim() !== "") ?? fallback).trim();
+}

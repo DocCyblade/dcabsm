@@ -2,8 +2,8 @@ import { mkdir, readFile, readdir, rename, rm, symlink, writeFile } from "node:f
 import { join } from "node:path";
 import { parseFlags } from "../args.ts";
 import type { Context } from "../context.ts";
-import { CliError, refusal } from "../errors.ts";
-import { exists, makeReadOnly } from "../fsutil.ts";
+import { CliError, errorMessage, firstLine, refusal } from "../errors.ts";
+import { exists, makeReadOnly, makeWritable } from "../fsutil.ts";
 import { logChange } from "../log.ts";
 import { step } from "../output.ts";
 import type { Invocation } from "../table.ts";
@@ -47,7 +47,7 @@ async function registryDoc(
     res = await ctx.fetcher.fetch(`${REGISTRY}/${what}`);
   } catch (err) {
     throw new CliError(
-      `Could not reach the npm registry: ${err instanceof Error ? err.message : String(err)}`,
+      `Could not reach the npm registry: ${errorMessage(err)}`,
       "Check the network, then run again.",
     );
   }
@@ -119,19 +119,19 @@ export async function installRelease(ctx: Context, plan: Plan): Promise<void> {
       `${ACTUAL_PACKAGE}@${version}`,
     ]);
     if (res.code !== 0) {
-      const reason =
-        res.stderr.split("\n").find((l) => l.trim() !== "") ?? `npm exited ${res.code}`;
-      throw new CliError(`npm could not install ${version}: ${reason.trim()}`);
+      throw new CliError(
+        `npm could not install ${version}: ${firstLine(res.stderr, `npm exited ${res.code}`)}`,
+      );
     }
     step(
       ctx,
       "done",
-      `Installed Release ${version} with npm --ignore-scripts, tied to Node ${patch}`,
+      `Installed Release ${version} with npm --ignore-scripts, tied to Node runtime ${patch}`,
     );
 
     if (!(await releaseLoads(ctx, work, nodeBin(ctx, patch, "node")))) {
       throw new CliError(
-        `Release ${version} is refused: ${NATIVE_MODULES.join(", ")} must all load on Node ${patch}, and they do not.`,
+        `Release ${version} is refused: ${NATIVE_MODULES.join(", ")} must all load on Node runtime ${patch}, and they do not.`,
         "Nothing was installed.",
       );
     }
@@ -141,13 +141,19 @@ export async function installRelease(ctx: Context, plan: Plan): Promise<void> {
     // The unit's PATH starts at release/node/bin (spec 4.5); the link follows node/<major> across patches.
     await symlink(join(ctx.paths.node, String(major)), join(work, "node"));
     const final = join(ctx.paths.releases, version);
+    if (await exists(final)) {
+      // A Release dir whose native modules do not load is repaired by replacing it.
+      step(ctx, "warn", `Replacing Release ${version}: its native modules did not load`);
+      await makeWritable(final);
+      await rm(final, { recursive: true, force: true });
+    }
     await rename(work, final);
     await makeReadOnly(final);
   } catch (err) {
     await rm(work, { recursive: true, force: true });
     throw err;
   }
-  await logChange(ctx, "release install", `installed ${version} on Node ${patch}`);
+  await logChange(ctx, "release install", `installed ${version} on Node runtime ${patch}`);
 }
 
 /** The Node major recorded with a Release. */
@@ -164,13 +170,18 @@ export async function releaseNodeMajor(ctx: Context, version: string): Promise<n
 /** True once any installed Release loads its native modules (spec 10.2 step 8). */
 export async function anyReleaseLoads(ctx: Context): Promise<boolean> {
   for (const version of await installedReleases(ctx)) {
-    const major = await releaseNodeMajor(ctx, version);
-    if (major === undefined) continue;
-    const bin = join(ctx.paths.node, String(major), "bin", "node");
-    if (!(await exists(bin))) continue;
-    if (await releaseLoads(ctx, join(ctx.paths.releases, version), bin)) return true;
+    if (await releaseIntact(ctx, version)) return true;
   }
   return false;
+}
+
+/** Whether an installed Release's native modules load with its recorded Node runtime. */
+async function releaseIntact(ctx: Context, version: string): Promise<boolean> {
+  const major = await releaseNodeMajor(ctx, version);
+  if (major === undefined) return false;
+  const bin = join(ctx.paths.node, String(major), "bin", "node");
+  if (!(await exists(bin))) return false;
+  return releaseLoads(ctx, join(ctx.paths.releases, version), bin);
 }
 
 /** `release install <v>` */
@@ -185,7 +196,7 @@ export async function releaseInstall({ ctx, args }: Invocation): Promise<void> {
   }
   const version = positional[0]!;
   checkReleaseVersion(version);
-  if (await exists(join(ctx.paths.releases, version))) {
+  if (await releaseIntact(ctx, version)) {
     ctx.io.out(`Release ${version} is already installed.`);
     return;
   }

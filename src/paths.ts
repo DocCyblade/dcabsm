@@ -1,5 +1,8 @@
 import { join } from "node:path";
 
+/** Where the Instances live as the Host sees it, for text written into units and Nginx files (spec 4.5, 5.1). */
+export const INSTANCES_LOGICAL = "/srv/dcabsm/instances";
+
 /** Every path DCABSM touches, hung off one configurable root (spec 13.1). */
 export interface Paths {
   root: string;

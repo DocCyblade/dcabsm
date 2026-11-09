@@ -1,4 +1,5 @@
 import type { Context } from "../context.ts";
+import { firstLine } from "../errors.ts";
 import { exists } from "../fsutil.ts";
 import { detectOs, supportedNames } from "./os.ts";
 
@@ -164,10 +165,10 @@ async function nginxConfigCheck(ctx: Context): Promise<CheckResult> {
     return { kind: "pass", label: "No existing Nginx config" };
   const res = await ctx.runner.run("nginx", ["-t"]);
   if (res.code !== 0) {
-    const reason = res.stderr.split("\n").find((l) => l.trim() !== "") ?? "no reason given";
+    const reason = firstLine(res.stderr, "no reason given");
     return {
       kind: "refuse",
-      message: `The existing Nginx config fails nginx -t: ${reason.trim()}`,
+      message: `The existing Nginx config fails nginx -t: ${reason}`,
       hint: `Fixing it is a Manual System Admin task. Fix it, ${RERUN}`,
     };
   }

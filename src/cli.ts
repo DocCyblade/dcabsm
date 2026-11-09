@@ -1,6 +1,14 @@
 import { exists } from "./fsutil.ts";
 import type { Context } from "./context.ts";
-import { Cancelled, CliError, EXIT_FAILURE, EXIT_OK, formatError, refusal } from "./errors.ts";
+import {
+  Cancelled,
+  CliError,
+  EXIT_FAILURE,
+  EXIT_OK,
+  errorMessage,
+  formatError,
+  refusal,
+} from "./errors.ts";
 import { helpLines } from "./help.ts";
 import { acquireLock } from "./lock.ts";
 import { logChange } from "./log.ts";
@@ -25,7 +33,7 @@ export async function run(argv: string[], ctx: Context): Promise<number> {
       for (const line of formatError(err)) ctx.io.err(line);
       return err.code;
     }
-    ctx.io.err(`error: ${err instanceof Error ? err.message : String(err)}`);
+    ctx.io.err(`error: ${errorMessage(err)}`);
     return EXIT_FAILURE;
   }
 }

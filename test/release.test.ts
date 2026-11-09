@@ -272,7 +272,7 @@ describe("host setup step 8", () => {
   it("installs the latest stable Release", async () => {
     expect(await setup()).toBe(0);
     expect(await names(h.ctx.paths.releases)).toEqual(["26.11.1"]);
-    expect(h.out).toContain("  · Install Actual 26.11.1 with its Node runtime");
+    expect(h.out).toContain("  · Install Release 26.11.1 with its Node runtime");
   });
 
   it("installs --release <v> instead", async () => {
@@ -293,6 +293,13 @@ describe("host setup step 8", () => {
     expect(await names(h.ctx.paths.releases)).toEqual(["26.10.0"]);
     expect(h.net.fetched).toEqual([]);
     expect(h.out).toContain("Every check passes; nothing to do.");
+  });
+
+  it("replaces a Release dir whose native modules do not load", async () => {
+    expect(await setup(["--release", "26.11.0"])).toBe(0);
+    h.net.brokenDirs.push(join(h.ctx.paths.releases, "26.11.0"));
+    expect(await run(["host", "setup", "--release", "26.11.0", "--yes"], h.ctx)).toBe(0);
+    expect(h.out.some((l) => l.includes("Replacing Release 26.11.0"))).toBe(true);
   });
 
   it("carries on after a failed install, installing the Release on the re-run", async () => {
@@ -320,5 +327,19 @@ describe("engines.node ranges", () => {
     ["24.11.1", "*", true],
   ])("%s against %j is %s", (v, range, expected) => {
     expect(ok(v, range)).toBe(expected);
+  });
+});
+
+describe("a Release dir whose native modules do not load", () => {
+  it("is replaced by release install", async () => {
+    await start();
+    await install("26.11.0");
+    const dir = join(h.ctx.paths.releases, "26.11.0");
+    h.net.brokenDirs.push(dir);
+    // The old dir fails its check; the freshly installed copy is in a work dir and loads.
+    expect(await install("26.11.0")).toBe(0);
+    expect(h.out.some((l) => l.includes("Replacing Release 26.11.0"))).toBe(true);
+    expect((await stat(dir)).mode & 0o222).toBe(0);
+    expect(await exists(join(dir, "package-lock.json"))).toBe(true);
   });
 });

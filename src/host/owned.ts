@@ -1,11 +1,12 @@
 import { createHash } from "node:crypto";
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { Context } from "../context.ts";
 import { lineDiff } from "../diff.ts";
 import { refusal } from "../errors.ts";
 import { exists, writeFileAtomic } from "../fsutil.ts";
 import { step } from "../output.ts";
+import { INSTANCES_LOGICAL } from "../paths.ts";
 
 /** A file DCABSM owns (spec 10.5). `path` is the logical path on the Host. */
 export interface OwnedFile {
@@ -35,7 +36,7 @@ export const hashOf = (text: string): string => createHash("sha256").update(text
 
 /** The Instance unit template (spec 4.5). */
 export function unitTemplate(): string {
-  const dir = "/srv/dcabsm/instances/%i";
+  const dir = `${INSTANCES_LOGICAL}/%i`;
   return `${HEADER}[Unit]
 Description=Actual Budget server (Instance %i)
 After=network-online.target
@@ -110,14 +111,26 @@ ExecStart=/usr/local/bin/dcabsm host nightly
 }
 
 export function nginxInclude(): string {
-  return `${HEADER}include /srv/dcabsm/instances/*/nginx/vhost.conf;\n`;
+  return `${HEADER}include ${INSTANCES_LOGICAL}/*/nginx/vhost.conf;\n`;
 }
 
-export function nginxDefaultServer(): string {
+/** Whether the Host has IPv6 (spec 5.2): the kernel lists at least one IPv6 address. The root is the seam. */
+export async function hostHasIpv6(ctx: Context): Promise<boolean> {
+  try {
+    return (await readFile(ctx.paths.under("/proc/net/if_inet6"), "utf8")).trim() !== "";
+  } catch {
+    return false;
+  }
+}
+
+/** The `listen` lines for port 443; IPv6 only when the Host has it. */
+export function listen443(ipv6: boolean, flags: string): string {
+  return `    listen 443 ${flags};\n${ipv6 ? `    listen [::]:443 ${flags};\n` : ""}`;
+}
+
+export function nginxDefaultServer(ipv6: boolean): string {
   return `${HEADER}server {
-    listen 443 ssl default_server;
-    listen [::]:443 ssl default_server;
-    ssl_protocols TLSv1.2 TLSv1.3;
+${listen443(ipv6, "ssl default_server")}    ssl_protocols TLSv1.2 TLSv1.3;
     ssl_reject_handshake on;
 }
 `;
@@ -160,7 +173,11 @@ export async function hostOwnedFiles(ctx: Context, nightlyTime: string): Promise
   // A default server DCABSM wrote earlier stays managed; otherwise another one wins.
   const ours = await exists(ctx.paths.under(DEFAULT_CONF_PATH));
   if (ours || !(await otherDefaultOn443(ctx))) {
-    files.push({ path: DEFAULT_CONF_PATH, content: nginxDefaultServer(), mode: 0o644 });
+    files.push({
+      path: DEFAULT_CONF_PATH,
+      content: nginxDefaultServer(await hostHasIpv6(ctx)),
+      mode: 0o644,
+    });
   }
   return files;
 }
@@ -239,6 +256,30 @@ export interface WriteResult {
   kept: string[];
   /** The hashes to store: the old ones, plus every file now matching what DCABSM wrote. */
   hashes: Record<string, string>;
+}
+
+/**
+ * Puts the Nginx files in `paths` back as they were: the old contents, or removed when the
+ * file was new. Used when `nginx -t` fails after a change (spec 10.5). Returns the hashes
+ * without those files' new entries.
+ */
+export async function restoreNginxFiles(
+  ctx: Context,
+  inspected: InspectedFile[],
+  paths: string[],
+  before: Record<string, string>,
+  hashes: Record<string, string>,
+): Promise<Record<string, string>> {
+  const restored = { ...hashes };
+  for (const path of paths) {
+    const item = inspected.find((i) => i.file.path === path)!;
+    const target = ctx.paths.under(path);
+    if (item.old === undefined) await rm(target, { force: true });
+    else await writeFileAtomic(target, item.old, item.file.mode);
+    if (before[path] === undefined) delete restored[path];
+    else restored[path] = before[path];
+  }
+  return restored;
 }
 
 /** The reusable owned-file writer (setup, doctor, Self-update). */

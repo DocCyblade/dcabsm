@@ -197,3 +197,108 @@ describe("owned files written by host setup", () => {
     expect(h.out).toContain("Every check passes; nothing to do.");
   });
 });
+
+describe("nginx -t after a change (spec 10.5)", () => {
+  const INCLUDE = "/etc/nginx/conf.d/dcabsm.conf";
+  const bad = { code: 1, stdout: "", stderr: "nginx: [emerg] bad\n" };
+
+  it("puts back the previous file, records no hash and does not reload when it fails", async () => {
+    const host = fakeHost();
+    expect(await setup(host)).toBe(0);
+    const old = "# older DCABSM output\n";
+    await writeFile(at(INCLUDE), old);
+    const cfg = await config();
+    cfg.ownedFiles[INCLUDE] = hashOf(old);
+    await writeFile(h.ctx.paths.hostConfig, JSON.stringify(cfg));
+    let tests = 0;
+    const base = host.run.bind(host);
+    host.run = (c, a) => (c === "nginx" && tests++ > 0 ? bad : base(c, a));
+    h.calls.length = 0;
+    h.err.length = 0;
+    expect(await rerun(["--yes"])).toBe(1);
+    expect(await read(INCLUDE)).toBe(old);
+    expect((await config()).ownedFiles[INCLUDE]).toBe(hashOf(old));
+    expect(systemctl()).not.toContain("reload nginx");
+    expect(h.err[0]).toContain("nginx -t failed after the change: nginx: [emerg] bad");
+  });
+
+  it("removes newly created files and records no hash for them", async () => {
+    const host = fakeHost();
+    host.installed.add("nginx");
+    host.installed.add("openssl");
+    // The refusal check (10.3) passes; the test after the change fails.
+    let tests = 0;
+    const base = host.run.bind(host);
+    host.run = (c, a) => (c === "nginx" && tests++ > 0 ? bad : base(c, a));
+    expect(await setup(host)).toBe(1);
+    expect(await pathExists(at(INCLUDE))).toBe(false);
+    expect(await pathExists(at(DEFAULT))).toBe(false);
+    const hashes = (await config()).ownedFiles ?? {};
+    expect(hashes[INCLUDE]).toBeUndefined();
+    expect(hashes[DEFAULT]).toBeUndefined();
+    expect(systemctl()).not.toContain("reload nginx");
+  });
+});
+
+describe("a re-run with nothing else to do", () => {
+  it("still starts and enables a stopped Nginx, asking first", async () => {
+    const host = fakeHost();
+    expect(await setup(host)).toBe(0);
+    const base = host.run.bind(host);
+    host.run = (c, a) =>
+      c === "systemctl" && a[0] === "is-active" ? { code: 3, stdout: "", stderr: "" } : base(c, a);
+    h.ctx.io.interactive = true;
+    h.answers.push("y");
+    h.calls.length = 0;
+    expect(await rerun([])).toBe(0);
+    expect(h.asked.some((q) => q.includes("Nginx is installed but stopped"))).toBe(true);
+    expect(systemctl()).toContain("enable --now nginx");
+  });
+
+  it("enables an Nginx that is running but not enabled", async () => {
+    const host = fakeHost();
+    expect(await setup(host)).toBe(0);
+    const base = host.run.bind(host);
+    host.run = (c, a) =>
+      c === "systemctl" && a[0] === "is-enabled" ? { code: 1, stdout: "", stderr: "" } : base(c, a);
+    h.calls.length = 0;
+    expect(await rerun(["--yes"])).toBe(0);
+    expect(systemctl()).toContain("enable --now nginx");
+  });
+});
+
+describe("IPv6 listeners (spec 5.2, 5.3)", () => {
+  it("leaves them out of the catch-all when the Host has no IPv6", async () => {
+    expect(await setup(fakeHost())).toBe(0);
+    const def = await read(DEFAULT);
+    expect(def).toContain("listen 443 ssl default_server;");
+    expect(def).not.toContain("[::]");
+  });
+
+  it("adds them when the Host has IPv6", async () => {
+    const host = fakeHost();
+    h = await harness({ setUp: false, runner: (c, a) => host.run(c, a) });
+    await mkdir(at("/proc/net"), { recursive: true });
+    await writeFile(
+      at("/proc/net/if_inet6"),
+      "00000000000000000000000000000001 01 80 10 80       lo\n",
+    );
+    expect(await rerun()).toBe(0);
+    expect(await read(DEFAULT)).toContain("listen [::]:443 ssl default_server;");
+  });
+});
+
+describe("host setup takes the lock (spec 10.2 step 1)", () => {
+  it("fails at once when another command holds it", async () => {
+    const host = fakeHost();
+    h = await harness({ setUp: false, runner: (c, a) => host.run(c, a) });
+    await mkdir(dirname(h.ctx.paths.lock), { recursive: true });
+    await writeFile(
+      h.ctx.paths.lock,
+      JSON.stringify({ pid: process.pid, command: "dcabsm other" }),
+    );
+    expect(await rerun()).toBe(1);
+    expect(h.err[0]).toContain("Another dcabsm command is running");
+    expect(h.calls.filter((c) => c.command === "env")).toEqual([]);
+  });
+});
