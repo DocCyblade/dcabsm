@@ -164,7 +164,10 @@ function findBashCompletion(): string | undefined {
 
 const bash5 = findBash5();
 const bashCompletion = findBashCompletion();
+// bash-completion loads a command's completion on first use, so sudo's has to be asked for. The loader
+// is _comp_load from 2.12 and _completion_loader before that.
 const SUDO = `source "$1"; source "$2"; shift 2
+complete -p sudo >/dev/null 2>&1 || _comp_load sudo 2>/dev/null || _completion_loader sudo
 fn=$(complete -p sudo | sed -n 's/.*-F \\([^ ]*\\).*/\\1/p')
 COMP_WORDS=(sudo "$@"); COMP_CWORD=$#; COMP_LINE="sudo $*"; COMP_POINT=\${#COMP_LINE}
 "$fn" sudo "\${!#}" "\${COMP_WORDS[COMP_CWORD-1]}"
