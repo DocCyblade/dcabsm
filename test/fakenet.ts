@@ -34,6 +34,8 @@ export interface FakeNet {
   serverUp: boolean;
   /** The version a started Instance's `/info` reports. */
   serverVersion: string;
+  /** Answer every request with a 503. */
+  offline: boolean;
   /** Everything fetched, in order. */
   fetched: string[];
   fetch(url: string): FetchResult | undefined;
@@ -68,10 +70,12 @@ export function fakeNet(overrides: Partial<FakeNet> = {}): FakeNet {
     brokenDirs: [],
     serverUp: true,
     serverVersion: "26.11.1",
+    offline: false,
     fetched: [],
     ...overrides,
     fetch(url) {
       net.fetched.push(url);
+      if (net.offline) return { status: 503, body: enc("offline") };
       if (net.down.includes(new URL(url).host)) return undefined;
       if (url === "https://api.github.com/repos/DocCyblade/dcabsm/releases/latest") {
         return json({ tag_name: `v${net.dcabsmLatest}` });

@@ -4,10 +4,12 @@ import { dirname, join } from "node:path";
 import { completionScript } from "../completion.ts";
 import type { Context } from "../context.ts";
 import { lineDiff } from "../diff.ts";
-import { refusal } from "../errors.ts";
+import { CliError, refusal } from "../errors.ts";
 import { exists, writeFileAtomic } from "../fsutil.ts";
 import { step } from "../output.ts";
 import { INSTANCES_LOGICAL } from "../paths.ts";
+import { readHostConfig, writeHostConfig } from "./config.ts";
+import { nginxTestFailure } from "./system.ts";
 
 /** A file DCABSM owns (spec 10.5). `path` is the logical path on the Host. */
 export interface OwnedFile {
@@ -316,4 +318,36 @@ export async function writeOwnedFiles(
   for (const path of result.kept)
     step(ctx, "warn", `Kept your edited ${path}; host doctor keeps raising it`);
   return result;
+}
+
+/**
+ * Writes the owned files, then runs `nginx -t` (spec 10.5). Nginx files count only once it passes;
+ * until then no hash is recorded, and on failure the old Nginx files are put back. `rerun` is the
+ * command to suggest after a failure.
+ */
+export async function writeVerified(
+  ctx: Context,
+  inspected: InspectedFile[],
+  replace: Set<string>,
+  hashes: Record<string, string>,
+  rerun: string,
+): Promise<WriteResult & { nginxWritten: string[] }> {
+  const result = await writeOwnedFiles(ctx, inspected, replace, hashes);
+  const config = (await readHostConfig(ctx)) ?? {};
+  const nginxWritten = result.written.filter((p) =>
+    isNginxFile(inspected.find((i) => i.file.path === p)!.file),
+  );
+  const reason = await nginxTestFailure(ctx);
+  if (reason !== undefined) {
+    const restored = await restoreNginxFiles(ctx, inspected, nginxWritten, hashes, result.hashes);
+    await writeHostConfig(ctx, { ...config, ownedFiles: restored });
+    throw new CliError(
+      `nginx -t failed after the change: ${reason}`,
+      nginxWritten.length > 0
+        ? `The previous Nginx files were put back and Nginx was not reloaded. Fix the problem, then run again: ${rerun}`
+        : `Nginx was not reloaded. Fix the config, then run again: ${rerun}`,
+    );
+  }
+  await writeHostConfig(ctx, { ...config, ownedFiles: result.hashes });
+  return { ...result, nginxWritten };
 }

@@ -15,7 +15,7 @@ import {
 } from "../release/install.ts";
 import type { Invocation } from "../table.ts";
 import type { InspectedFile } from "./owned.ts";
-import { isInstalled, runChecks, type CheckResult, type Override } from "./checks.ts";
+import { runChecks, type Refusal, type Override } from "./checks.ts";
 import {
   DEFAULT_BACKUP_DIR,
   defaultHostConfig,
@@ -23,14 +23,13 @@ import {
   readHostConfig,
   writeHostConfig,
 } from "./config.ts";
+import { isInstalled, nginxIsActive, nginxTestFailure, nginxUp, systemctl } from "./system.ts";
 import {
   hostOwnedFiles,
   inspectOwnedFiles,
-  isNginxFile,
   pending,
   resolveDrift,
-  restoreNginxFiles,
-  writeOwnedFiles,
+  writeVerified,
 } from "./owned.ts";
 
 const PACKAGES = ["nginx", "openssl"];
@@ -60,7 +59,7 @@ export async function hostSetup({ ctx, args }: Invocation): Promise<void> {
   ctx.io.out("Setup checks (nothing changes yet)");
   const results = await runChecks(ctx);
   const overrides: Override[] = [];
-  const blocked: Array<Extract<CheckResult, { kind: "refuse" }>> = [];
+  const blocked: Refusal[] = [];
   for (const result of results) {
     if (result.kind === "pass") {
       step(ctx, "done", result.label);
@@ -81,7 +80,8 @@ export async function hostSetup({ ctx, args }: Invocation): Promise<void> {
     requested !== stored.backupDir
   ) {
     blocked.push({
-      kind: "refuse",
+      kind: "problem",
+      severity: "fail",
       message: `Backups are already in ${stored.backupDir}, not ${requested}.`,
       hint: "Moving Backups is a Manual System Admin task. Run again without --backup-dir: sudo dcabsm host setup",
     });
@@ -193,33 +193,6 @@ export async function hostSetup({ ctx, args }: Invocation): Promise<void> {
   if (releasePlan) await installRelease(ctx, releasePlan);
 }
 
-async function systemctl(ctx: Context, ...args: string[]): Promise<void> {
-  const res = await ctx.runner.run("systemctl", args);
-  if (res.code !== 0) {
-    throw new CliError(
-      `systemctl ${args.join(" ")} failed: ${firstLine(res.stderr, `exit ${res.code}`)}`,
-      "Fix the problem, then run again: sudo dcabsm host setup",
-    );
-  }
-}
-
-const nginxIsActive = async (ctx: Context): Promise<boolean> =>
-  (await ctx.runner.run("systemctl", ["is-active", "--quiet", "nginx"])).code === 0;
-
-/** Whether Nginx is both running and enabled at boot. */
-async function nginxUp(ctx: Context): Promise<boolean> {
-  return (
-    (await nginxIsActive(ctx)) &&
-    (await ctx.runner.run("systemctl", ["is-enabled", "--quiet", "nginx"])).code === 0
-  );
-}
-
-/** The reason `nginx -t` fails, or undefined when it passes. */
-async function nginxTestFailure(ctx: Context): Promise<string | undefined> {
-  const test = await ctx.runner.run("nginx", ["-t"]);
-  return test.code === 0 ? undefined : firstLine(test.stderr, "no reason given");
-}
-
 /** Starts and enables a stopped Nginx, asking first if it was installed before setup ran. */
 async function startNginx(
   ctx: Context,
@@ -257,31 +230,14 @@ async function installOwnedFiles(
   replace: Set<string>,
   opts: { hashes: Record<string, string>; nginxWasInstalled: boolean; yes?: boolean },
 ): Promise<void> {
-  const result = await writeOwnedFiles(ctx, inspected, replace, opts.hashes);
-  const config = (await readHostConfig(ctx)) ?? {};
-  const nginxWritten = result.written.filter((p) =>
-    isNginxFile(inspected.find((i) => i.file.path === p)!.file),
+  const result = await writeVerified(
+    ctx,
+    inspected,
+    replace,
+    opts.hashes,
+    "sudo dcabsm host setup",
   );
-
-  // Nginx files count only once `nginx -t` passes; until then no hash is recorded (spec 10.5).
-  const reason = await nginxTestFailure(ctx);
-  if (reason !== undefined) {
-    const hashes = await restoreNginxFiles(
-      ctx,
-      inspected,
-      nginxWritten,
-      opts.hashes,
-      result.hashes,
-    );
-    await writeHostConfig(ctx, { ...config, ownedFiles: hashes });
-    throw new CliError(
-      `nginx -t failed after the change: ${reason}`,
-      nginxWritten.length > 0
-        ? "The previous Nginx files were put back and Nginx was not reloaded. Fix the problem, then run again: sudo dcabsm host setup"
-        : "Nginx was not reloaded. Fix the config, then run again: sudo dcabsm host setup",
-    );
-  }
-  await writeHostConfig(ctx, { ...config, ownedFiles: result.hashes });
+  const nginxWritten = result.nginxWritten;
   if (result.written.length > 0) {
     step(ctx, "done", `Wrote ${result.written.map((p) => p.split("/").pop()).join(", ")}`);
   }

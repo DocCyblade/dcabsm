@@ -10,8 +10,14 @@ export async function exists(path: string): Promise<boolean> {
   }
 }
 
+/** Who "root" is for files DCABSM made: root itself, or, when run unprivileged (tests), the running user. */
+export function rootOwner(): { uid: number; gid: number } {
+  const uid = process.getuid?.() ?? 0;
+  return uid === 0 ? { uid: 0, gid: 0 } : { uid, gid: process.getgid?.() ?? 0 };
+}
+
 /** Only root can hand a file to root; anyone else already owns what they just made. */
-async function ownedByRoot(path: string): Promise<void> {
+export async function ownedByRoot(path: string): Promise<void> {
   if (process.getuid?.() === 0) await chown(path, 0, 0);
 }
 

@@ -19,42 +19,42 @@ These warnings come back in the output of `instance upgrade`, `instance rollback
 
 Commands are `dcabsm <noun> <verb> [args] [flags]`. There are no flat verbs and no short aliases.
 
-| Noun | Command | What it does |
-|---|---|---|
-| `host` | `host setup [--release <v>] [--backup-dir <path>] [--yes]` | Prepare the Host and install the first Release |
-| | `host doctor [--fix] [--yes]` | Check the Host and every Instance, and optionally fix what DCABSM owns |
-| | `host check-updates` | Look for a newer Actual Release, Node patch and DCABSM version |
-| | `host settings` | Show the Host settings |
-| | `host set <key> <value>` | Change one Host setting |
-| `instance` | `instance list` | The overview: every Instance, then the last update check |
-| | `instance show <name>` | One Instance in detail |
-| | `instance create <name> --hostname <host> (--cert <f> --key <f> \| --self-signed) [--release <v>]` | Create an Instance |
-| | `instance remove <name> [--confirm <name>]` | Take a final Backup, then delete the Instance |
-| | `instance start\|stop\|restart <names>\|--all` | Start, stop or restart Instances |
-| | `instance logs <name> [-f] [--since <time>]` | Read an Instance's journal |
-| | `instance set-hostname <name> <host> [--cert <f> [--key <f>] \| --self-signed]` | Move an Instance to a new hostname |
-| | `instance reset-password <name>` | Reset the server password in Actual's own tool |
-| | `instance settings <name>` | Show an Instance's settings |
-| | `instance set <name> <key> <value> [--yes]` | Change one Instance setting |
-| | `instance unset <name> <key> [--yes]` | Return one Instance setting to Actual's default |
-| | `instance upgrade <names>\|--all [--to <v>] [--yes]` | Move Instances to a newer Release |
-| | `instance rollback <name> [--restore-data] [--confirm <name>]` | Go back one step to the previous Release |
-| | `instance restore <name> [<archive>] [--confirm <name>]` | Restore an Instance from a Backup |
-| | `instance restore --from <archive>` | Rebuild an Instance from an archive on a new Host |
-| | `instance clone <source> <new> --hostname <host> [cert options] [--yes]` | Copy an Instance under a new name and hostname |
-| | `instance clone --from <archive> <new> --hostname <host> [cert options]` | Make a new Instance from an archive |
-| `backup` | `backup create <names>\|--all` | Take a `manual` Backup |
-| | `backup list [<names>]` | List archives |
-| | `backup prune [<names>\|--all] [--dry-run]` | Apply Retention by hand |
-| | `backup schedule <name> on\|off` | Switch scheduled Backups on or off for one Instance |
-| `cert` | `cert test [<names>\|--all]` | Check what each hostname serves |
-| | `cert update <names>\|--all --cert <f> [--key <f>]` | Swap in a new certificate |
-| `release` | `release list` | Installed Releases, their Node runtime and the Instances on them |
-| | `release install <v>` | Install a Release |
-| | `release prune [--yes]` | Remove Releases no Instance uses, and unused Node runtimes |
-| | `release update-node [--yes]` | Install a Node patch and restart the Instances on it |
-| `self` | `self update [--to <ver>] [--yes]` | Update DCABSM itself |
-| | `self version` | Print the installed version. `dcabsm --version` does the same |
+| Noun       | Command                                                                                            | What it does                                                           |
+| ---------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `host`     | `host setup [--release <v>] [--backup-dir <path>] [--yes]`                                         | Prepare the Host and install the first Release                         |
+|            | `host doctor [--fix] [--yes]`                                                                      | Check the Host and every Instance, and optionally fix what DCABSM owns |
+|            | `host check-updates`                                                                               | Look for a newer Actual Release, Node patch and DCABSM version         |
+|            | `host settings`                                                                                    | Show the Host settings                                                 |
+|            | `host set <key> <value>`                                                                           | Change one Host setting                                                |
+| `instance` | `instance list`                                                                                    | The overview: every Instance, then the last update check               |
+|            | `instance show <name>`                                                                             | One Instance in detail                                                 |
+|            | `instance create <name> --hostname <host> (--cert <f> --key <f> \| --self-signed) [--release <v>]` | Create an Instance                                                     |
+|            | `instance remove <name> [--confirm <name>]`                                                        | Take a final Backup, then delete the Instance                          |
+|            | `instance start\|stop\|restart <names>\|--all`                                                     | Start, stop or restart Instances                                       |
+|            | `instance logs <name> [-f] [--since <time>]`                                                       | Read an Instance's journal                                             |
+|            | `instance set-hostname <name> <host> [--cert <f> [--key <f>] \| --self-signed]`                    | Move an Instance to a new hostname                                     |
+|            | `instance reset-password <name>`                                                                   | Reset the server password in Actual's own tool                         |
+|            | `instance settings <name>`                                                                         | Show an Instance's settings                                            |
+|            | `instance set <name> <key> <value> [--yes]`                                                        | Change one Instance setting                                            |
+|            | `instance unset <name> <key> [--yes]`                                                              | Return one Instance setting to Actual's default                        |
+|            | `instance upgrade <names>\|--all [--to <v>] [--yes]`                                               | Move Instances to a newer Release                                      |
+|            | `instance rollback <name> [--restore-data] [--confirm <name>]`                                     | Go back one step to the previous Release                               |
+|            | `instance restore <name> [<archive>] [--confirm <name>]`                                           | Restore an Instance from a Backup                                      |
+|            | `instance restore --from <archive>`                                                                | Rebuild an Instance from an archive on a new Host                      |
+|            | `instance clone <source> <new> --hostname <host> [cert options] [--yes]`                           | Copy an Instance under a new name and hostname                         |
+|            | `instance clone --from <archive> <new> --hostname <host> [cert options]`                           | Make a new Instance from an archive                                    |
+| `backup`   | `backup create <names>\|--all`                                                                     | Take a `manual` Backup                                                 |
+|            | `backup list [<names>]`                                                                            | List archives                                                          |
+|            | `backup prune [<names>\|--all] [--dry-run]`                                                        | Apply Retention by hand                                                |
+|            | `backup schedule <name> on\|off`                                                                   | Switch scheduled Backups on or off for one Instance                    |
+| `cert`     | `cert test [<names>\|--all]`                                                                       | Check what each hostname serves                                        |
+|            | `cert update <names>\|--all --cert <f> [--key <f>]`                                                | Swap in a new certificate                                              |
+| `release`  | `release list`                                                                                     | Installed Releases, their Node runtime and the Instances on them       |
+|            | `release install <v>`                                                                              | Install a Release                                                      |
+|            | `release prune [--yes]`                                                                            | Remove Releases no Instance uses, and unused Node runtimes             |
+|            | `release update-node [--yes]`                                                                      | Install a Node patch and restart the Instances on it                   |
+| `self`     | `self update [--to <ver>] [--yes]`                                                                 | Update DCABSM itself                                                   |
+|            | `self version`                                                                                     | Print the installed version. `dcabsm --version` does the same          |
 
 `dcabsm help` prints this list. `host nightly` also exists: the `dcabsm-nightly` service runs it, and `help` doesn't list it.
 
@@ -133,12 +133,12 @@ An unknown name refuses with a pointer to `instance list`. Commands that work on
 
 Steps print one line each:
 
-| Mark | Meaning |
-|---|---|
-| `✓` | done, or the check passed |
-| `✗` | failed |
-| `!` | a warning |
-| `·` | information |
+| Mark | Meaning                   |
+| ---- | ------------------------- |
+| `✓`  | done, or the check passed |
+| `✗`  | failed                    |
+| `!`  | a warning                 |
+| `·`  | information               |
 
 Errors print one line, then an indented hint that gives the full next command:
 
@@ -149,11 +149,11 @@ error: test has an unfinished Release change (upgrade, 26.10.0 → 26.11.0).
 
 ### Exit codes
 
-| Code | Meaning |
-|---|---|
-| `0` | success |
-| `1` | failure, or cancelled at a prompt |
-| `2` | usage error, or a refusal before anything changed |
+| Code | Meaning                                           |
+| ---- | ------------------------------------------------- |
+| `0`  | success                                           |
+| `1`  | failure, or cancelled at a prompt                 |
+| `2`  | usage error, or a refusal before anything changed |
 
 `host doctor` has its own codes: `0` pass or notes only, `1` warnings, `2` any failure.
 
@@ -307,10 +307,10 @@ If npm can't be reached, it warns and still checks the rest.
   keep-pre-clone       5
 ```
 
-| Key | Value |
-|---|---|
-| `nightly-time` | `HH:MM`, Host local time. Changing it regenerates the timer |
-| `keep-scheduled`, `keep-pre-upgrade`, `keep-pre-restore`, `keep-pre-clone` | Retention count, never below 1 (spec 8.3) |
+| Key                                                                        | Value                                                       |
+| -------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `nightly-time`                                                             | `HH:MM`, Host local time. Changing it regenerates the timer |
+| `keep-scheduled`, `keep-pre-upgrade`, `keep-pre-restore`, `keep-pre-clone` | Retention count, never below 1 (spec 8.3)                   |
 
 `backup-dir` is shown but can only be set by `host setup --backup-dir`. Any other key gets "Unknown setting".
 
@@ -384,6 +384,7 @@ Scheduled backups are on.
   ```
 
   A certificate that is expired, doesn't cover the hostname or doesn't match the key is refused with nothing changed (spec 5.6).
+
 - **Self-signed** prints:
 
   ```
@@ -471,14 +472,14 @@ It refuses:
 
 An Instance exposes a fixed list of Actual's settings (spec 4.11). Everything else keeps the Release's own default.
 
-| Key | Actual key | Actual default | Value | From |
-|---|---|---|---|---|
-| `upload-sync-limit-mb` | `upload.fileSizeSyncLimitMB` | 20 | whole number 1–1024 | 26.10.0 |
-| `upload-encrypted-sync-limit-mb` | `upload.syncEncryptedFileSizeLimitMB` | 50 | whole number 1–1024 | 26.10.0 |
-| `upload-limit-mb` | `upload.fileSizeLimitMB` | 20 | whole number 1–1024 | 26.10.0 |
-| `openid-enforce` | `enforceOpenId` | false | `true` or `false` | 26.10.0 |
-| `openid-user-creation` | `userCreationMode` | manual | `manual` or `login` | 26.10.0 |
-| `simplefin-allowed-networks` | `simplefinAllowedNetworks` | empty | comma-separated IPs and CIDRs | 26.11.0 |
+| Key                              | Actual key                            | Actual default | Value                         | From    |
+| -------------------------------- | ------------------------------------- | -------------- | ----------------------------- | ------- |
+| `upload-sync-limit-mb`           | `upload.fileSizeSyncLimitMB`          | 20             | whole number 1–1024           | 26.10.0 |
+| `upload-encrypted-sync-limit-mb` | `upload.syncEncryptedFileSizeLimitMB` | 50             | whole number 1–1024           | 26.10.0 |
+| `upload-limit-mb`                | `upload.fileSizeLimitMB`              | 20             | whole number 1–1024           | 26.10.0 |
+| `openid-enforce`                 | `enforceOpenId`                       | false          | `true` or `false`             | 26.10.0 |
+| `openid-user-creation`           | `userCreationMode`                    | manual         | `manual` or `login`           | 26.10.0 |
+| `simplefin-allowed-networks`     | `simplefinAllowedNetworks`            | empty          | comma-separated IPs and CIDRs | 26.11.0 |
 
 `instance settings` shows every key, whether its value is Actual's default or was set, and whether the current Release uses it:
 
@@ -573,6 +574,7 @@ On every device
   ```
 
   If the automatic rollback also fails, the Instance stays stopped, the Backup is kept and named, and the command exits 1.
+
 - **Not enough space** for the Backup fails before the Instance stops. DCABSM never deletes Backups to make room.
 - An Instance that has never started has no data, so it just switches Release, with no Backup.
 
@@ -625,6 +627,7 @@ It ends with the same device advice as [instance restore](#instance-restore).
 - Any Instance setting the older Release doesn't know is listed as "not used by <release>".
 
 <a id="restore"></a>
+
 ### instance restore
 
 `instance restore <name> [<archive>] [--confirm <name>]`
