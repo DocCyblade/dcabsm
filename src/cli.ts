@@ -2,7 +2,7 @@ import { access } from "node:fs/promises";
 import type { Context } from "./context.ts";
 import { Cancelled, CliError, EXIT_FAILURE, EXIT_OK, formatError, refusal } from "./errors.ts";
 import { helpLines } from "./help.ts";
-import { withLock } from "./lock.ts";
+import { acquireLock } from "./lock.ts";
 import { logChange } from "./log.ts";
 import { findNoun, findVerb, type Verb } from "./table.ts";
 import { versionLine } from "./version.ts";
@@ -41,7 +41,7 @@ export async function run(argv: string[], ctx: Context): Promise<number> {
 async function dispatch(argv: string[], ctx: Context): Promise<number> {
   const [first, second, ...rest] = argv;
 
-  if (first === undefined || first === "help" || first === "--help" || first === "-h") {
+  if (first === undefined || first === "help" || first === "--help") {
     for (const line of helpLines()) ctx.io.out(line);
     return EXIT_OK;
   }
@@ -86,11 +86,14 @@ async function dispatch(argv: string[], ctx: Context): Promise<number> {
   }
 
   const name = `${noun.name} ${verb.name}`;
+  const release = await acquireLock(ctx, commandLine);
   try {
-    await withLock(ctx, commandLine, () => handler({ ctx, args }));
+    await handler({ ctx, args });
   } catch (err) {
     await logChange(ctx, name, err instanceof Cancelled ? "cancelled" : "failed");
     throw err;
+  } finally {
+    await release();
   }
   await logChange(ctx, name, "ok");
   return EXIT_OK;

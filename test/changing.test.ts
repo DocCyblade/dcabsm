@@ -54,6 +54,7 @@ describe("changing commands", () => {
     const release = await acquireLock(h.ctx, "dcabsm instance upgrade --all");
     expect(await run(["backup", "create", "--all"], h.ctx)).toBe(1);
     expect(h.err[0]).toContain("Another dcabsm command is running");
+    expect(h.calls).toEqual([]);
     await release();
   });
 

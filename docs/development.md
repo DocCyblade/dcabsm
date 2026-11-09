@@ -15,6 +15,9 @@ DCABSM is TypeScript on Node 24, bundled by esbuild into one JS file. It has no 
 - `src/table.ts`: the one noun → verb table. It drives `help` and routing. To build a command, set its `run`.
 - `src/cli.ts`: routing, the root and setup guards, and the lock-and-log wrapper for changing commands.
 - `src/context.ts`: the `Context` every command gets. The command runner and the fetcher are the only two seams (spec 13.1).
+- `src/real.ts`: the production command runner, fetcher and terminal. `src/main.ts` wires them in.
+- `src/errors.ts`, `src/help.ts`, `src/version.ts`: exit codes and error text, the `help` text, and the version and layout number.
+- `scripts/build.mjs`: the esbuild bundle; it injects the version from `package.json`.
 - `src/paths.ts`: every path hangs off one root. `DCABSM_ROOT` moves it; the default is `/`.
 - `src/prompt.ts`, `src/lock.ts`, `src/log.ts`: the helpers every command shares.
 - `test/helpers.ts`: a `Context` on a temporary root with a faked runner and fetcher. Tests assert on the files left behind.

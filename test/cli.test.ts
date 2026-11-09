@@ -20,6 +20,11 @@ describe("help and version", () => {
     expect(text).not.toContain("nightly");
   });
 
+  it("runs help without root and before setup", async () => {
+    h = await harness({ uid: 1000, setUp: false });
+    expect(await run(["help"], h.ctx)).toBe(0);
+  });
+
   it("routes host nightly even though help hides it", () => {
     const verb = findVerb(findNoun("host")!, "nightly");
     expect(verb?.hidden).toBe(true);
