@@ -27,11 +27,9 @@ import { isInstalled, nginxIsActive, nginxTestFailure, nginxUp, systemctl } from
 import {
   hostOwnedFiles,
   inspectOwnedFiles,
-  isNginxFile,
   pending,
   resolveDrift,
-  restoreNginxFiles,
-  writeOwnedFiles,
+  writeVerified,
 } from "./owned.ts";
 
 const PACKAGES = ["nginx", "openssl"];
@@ -232,31 +230,8 @@ async function installOwnedFiles(
   replace: Set<string>,
   opts: { hashes: Record<string, string>; nginxWasInstalled: boolean; yes?: boolean },
 ): Promise<void> {
-  const result = await writeOwnedFiles(ctx, inspected, replace, opts.hashes);
-  const config = (await readHostConfig(ctx)) ?? {};
-  const nginxWritten = result.written.filter((p) =>
-    isNginxFile(inspected.find((i) => i.file.path === p)!.file),
-  );
-
-  // Nginx files count only once `nginx -t` passes; until then no hash is recorded (spec 10.5).
-  const reason = await nginxTestFailure(ctx);
-  if (reason !== undefined) {
-    const hashes = await restoreNginxFiles(
-      ctx,
-      inspected,
-      nginxWritten,
-      opts.hashes,
-      result.hashes,
-    );
-    await writeHostConfig(ctx, { ...config, ownedFiles: hashes });
-    throw new CliError(
-      `nginx -t failed after the change: ${reason}`,
-      nginxWritten.length > 0
-        ? "The previous Nginx files were put back and Nginx was not reloaded. Fix the problem, then run again: sudo dcabsm host setup"
-        : "Nginx was not reloaded. Fix the config, then run again: sudo dcabsm host setup",
-    );
-  }
-  await writeHostConfig(ctx, { ...config, ownedFiles: result.hashes });
+  const result = await writeVerified(ctx, inspected, replace, opts.hashes, "sudo dcabsm host setup");
+  const nginxWritten = result.nginxWritten;
   if (result.written.length > 0) {
     step(ctx, "done", `Wrote ${result.written.map((p) => p.split("/").pop()).join(", ")}`);
   }
