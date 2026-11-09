@@ -36,4 +36,9 @@ export interface Context {
   io: Io;
   /** The effective user id; 0 is root. */
   uid: number;
+  /** The CPU architecture in Node's spelling: `x64` or `arm64`. */
+  arch: string;
+  /** Environment variables, such as the `DCABSM_ALLOW_*` overrides. */
+  env: Record<string, string | undefined>;
+  now(): Date;
 }

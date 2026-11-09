@@ -4,6 +4,21 @@ import { dirname, join } from "node:path";
 import type { CommandRunner, Context, Fetcher, Io, RunResult } from "../src/context.ts";
 import { pathsUnder } from "../src/paths.ts";
 
+export const DEBIAN_13 = `PRETTY_NAME="Debian GNU/Linux 13 (trixie)"
+NAME="Debian GNU/Linux"
+VERSION_ID="13"
+VERSION_CODENAME=trixie
+ID=debian
+`;
+
+export const UBUNTU_2404 = `PRETTY_NAME="Ubuntu 24.04.2 LTS"
+NAME="Ubuntu"
+VERSION_ID="24.04"
+VERSION_CODENAME=noble
+ID=ubuntu
+ID_LIKE=debian
+`;
+
 export interface Harness {
   ctx: Context;
   out: string[];
@@ -20,6 +35,10 @@ export interface HarnessOptions {
   interactive?: boolean;
   answers?: string[];
   setUp?: boolean;
+  arch?: string;
+  env?: Record<string, string | undefined>;
+  /** The contents of /etc/os-release. Default: Debian 13. Null: no file. */
+  osRelease?: string | null;
   runner?: (command: string, args: string[]) => RunResult;
 }
 
@@ -27,6 +46,11 @@ export interface HarnessOptions {
 export async function harness(opts: HarnessOptions = {}): Promise<Harness> {
   const root = await mkdtemp(join(tmpdir(), "dcabsm-test-"));
   const paths = pathsUnder(root);
+  const osRelease = opts.osRelease === undefined ? DEBIAN_13 : opts.osRelease;
+  if (osRelease !== null) {
+    await mkdir(dirname(paths.osRelease), { recursive: true });
+    await writeFile(paths.osRelease, osRelease);
+  }
   if (opts.setUp ?? true) {
     await mkdir(dirname(paths.hostConfig), { recursive: true });
     await writeFile(paths.hostConfig, "{}");
@@ -60,7 +84,16 @@ export async function harness(opts: HarnessOptions = {}): Promise<Harness> {
   };
 
   return {
-    ctx: { paths, runner, fetcher, io, uid: opts.uid ?? 0 },
+    ctx: {
+      paths,
+      runner,
+      fetcher,
+      io,
+      uid: opts.uid ?? 0,
+      arch: opts.arch ?? "x64",
+      env: opts.env ?? {},
+      now: () => new Date("2026-11-09T12:00:00Z"),
+    },
     out,
     err,
     calls,

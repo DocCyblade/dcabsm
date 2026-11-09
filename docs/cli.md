@@ -93,6 +93,12 @@ On an Unsupported Host (spec 10.4), every command except `host doctor` starts wi
 UNSUPPORTED HOST: a safety check was overridden on 2026-10-02. You are on your own.
 ```
 
+If the Host later runs an OS that is not supported, only `host setup` refuses. Every other command warns on stderr and logs the line, then carries on (spec 10.3):
+
+```
+! Fedora Linux 41 on amd64 is not a supported Host. Backup and restore still work, but you are on your own.
+```
+
 ### Choosing Instances
 
 Commands that take `<names>|--all` take one or more Instance names, or `--all` for every Instance. With neither, they refuse:

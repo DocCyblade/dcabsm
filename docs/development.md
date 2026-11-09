@@ -18,6 +18,7 @@ DCABSM is TypeScript on Node 24, bundled by esbuild into one JS file. It has no 
 - `src/real.ts`: the production command runner, fetcher and terminal. `src/main.ts` wires them in.
 - `src/errors.ts`, `src/help.ts`, `src/version.ts`: exit codes and error text, the `help` text, and the version and layout number.
 - `scripts/build.mjs`: the esbuild bundle; it injects the version from `package.json`.
+- `src/host/`: Host-level code. `os.ts` holds the supported OS table (spec 1.4), `checks.ts` the refusals (10.3), `setup.ts` `host setup`, `config.ts` `dcabsm.json`, and `notices.ts` the banner and OS warning every other command prints.
 - `src/paths.ts`: every path hangs off one root. `DCABSM_ROOT` moves it; the default is `/`.
 - `src/prompt.ts`, `src/lock.ts`, `src/log.ts`: the helpers every command shares.
 - `test/helpers.ts`: a `Context` on a temporary root with a faked runner and fetcher. Tests assert on the files left behind.

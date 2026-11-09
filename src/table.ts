@@ -1,4 +1,5 @@
 import type { Context } from "./context.ts";
+import { hostSetup } from "./host/setup.ts";
 import { versionLine } from "./version.ts";
 
 export interface Invocation {
@@ -44,6 +45,7 @@ export const table: Noun[] = [
         summary: "Prepare the Host and install the first Release",
         beforeSetup: true,
         changes: true,
+        run: hostSetup,
       },
       {
         name: "doctor",
