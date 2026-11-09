@@ -19,7 +19,7 @@ DCABSM is TypeScript on Node 24, bundled by esbuild into one JS file. It has no 
 - `src/errors.ts`, `src/help.ts`, `src/version.ts`: exit codes and error text, the `help` text, and the version and layout number.
 - `src/completion.ts`: generates the bash completion script from the table. `scripts/build.mjs` writes it to `dist/share/bash-completion/completions/dcabsm`. The real-bash test needs bash 5 and `bash-completion`, and skips without them (macOS ships bash 3.2).
 - `scripts/build.mjs`: the esbuild bundle; it injects the version from `package.json`.
-- `src/host/`: Host-level code. `os.ts` holds the supported OS table (spec 1.4), `checks.ts` the refusals (10.3), `setup.ts` `host setup`, `config.ts` `dcabsm.json`, and `notices.ts` the banner and OS warning every other command prints.
+- `src/host/`: Host-level code. `os.ts` holds the supported OS table (spec 1.4), `checks.ts` the refusals (10.3), `setup.ts` `host setup`, `config.ts` `dcabsm.json`, and `notices.ts` the banner and OS warning every other command prints. `checks.ts` holds the one list of Host checks (`hostChecks`) that setup and `host doctor` share: each has a test, a severity and an optional fix. `health.ts` and `tree.ts` hold the doctor-only checks, and `doctor.ts` runs the list, asks about fixes and sets the exit code.
 - `src/args.ts`, `src/fsutil.ts`, `src/output.ts`: flag parsing, file and directory helpers, and the step marks.
 - `src/paths.ts`: every path hangs off one root. `DCABSM_ROOT` moves it; the default is `/`. In the shipped completion script it is a test seam only: it lets the real-bash tests run under a temporary root.
 - `src/prompt.ts`, `src/lock.ts`, `src/log.ts`: the helpers every command shares.

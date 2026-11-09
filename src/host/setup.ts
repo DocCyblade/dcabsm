@@ -230,7 +230,13 @@ async function installOwnedFiles(
   replace: Set<string>,
   opts: { hashes: Record<string, string>; nginxWasInstalled: boolean; yes?: boolean },
 ): Promise<void> {
-  const result = await writeVerified(ctx, inspected, replace, opts.hashes, "sudo dcabsm host setup");
+  const result = await writeVerified(
+    ctx,
+    inspected,
+    replace,
+    opts.hashes,
+    "sudo dcabsm host setup",
+  );
   const nginxWritten = result.nginxWritten;
   if (result.written.length > 0) {
     step(ctx, "done", `Wrote ${result.written.map((p) => p.split("/").pop()).join(", ")}`);

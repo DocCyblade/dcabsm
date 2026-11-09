@@ -58,13 +58,7 @@ async function fixProblems(ctx: Context, results: CheckResult[], yes?: boolean):
 }
 
 /** `host doctor [--fix] [--yes]` (spec 10.6). Read-only unless `--fix`, which holds the lock (cli.ts). */
-export async function hostDoctor({
-  ctx,
-  args,
-}: {
-  ctx: Context;
-  args: string[];
-}): Promise<number> {
+export async function hostDoctor({ ctx, args }: { ctx: Context; args: string[] }): Promise<number> {
   const flags = parseFlags(args, { fix: { type: "boolean" }, yes: { type: "boolean" } });
   if (flags.fix && !flags.yes && !ctx.io.interactive) throw noTerminal("--yes");
 

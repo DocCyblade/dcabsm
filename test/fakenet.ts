@@ -24,6 +24,10 @@ export interface FakeNet {
   nativeFails: boolean;
   /** Directories whose native-module check fails, whatever `nativeFails` says. */
   brokenDirs: string[];
+  /** Node's end-of-life dates by `v<major>`, as nodejs/Release's schedule.json has them. */
+  schedule: Record<string, { end: string }>;
+  /** Answer every request with a 503. */
+  offline: boolean;
   /** Everything fetched, in order. */
   fetched: string[];
   fetch(url: string): FetchResult | undefined;
@@ -53,10 +57,19 @@ export function fakeNet(overrides: Partial<FakeNet> = {}): FakeNet {
     badChecksum: false,
     nativeFails: false,
     brokenDirs: [],
+    schedule: {
+      v20: { end: "2026-04-30" },
+      v22: { end: "2027-04-30" },
+      v24: { end: "2028-04-30" },
+    },
+    offline: false,
     fetched: [],
     ...overrides,
     fetch(url) {
       net.fetched.push(url);
+      if (net.offline) return { status: 503, body: enc("offline") };
+      if (url === "https://raw.githubusercontent.com/nodejs/Release/main/schedule.json")
+        return json(net.schedule);
       const reg = /^https:\/\/registry\.npmjs\.org\/@actual-app%2fsync-server\/(.+)$/.exec(url);
       if (reg) {
         const v = reg[1] === "latest" ? net.latest : reg[1]!;

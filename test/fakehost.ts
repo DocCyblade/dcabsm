@@ -87,8 +87,12 @@ export function fakeHost(overrides: Partial<FakeHost> = {}): FakeHost {
       if (command === "systemctl") return host.systemctl(args);
       if (command === "ufw") return host.ufw === "" ? fail("not found", 127) : ok(host.ufw);
       if (command === "df") {
-        const dev = args[args.length - 1]!.includes("/instances") ? host.dataDevice : host.backupDevice;
-        return ok(`Filesystem 1024-blocks Used Available Capacity Mounted on\n${dev} 100 1 99 1% /\n`);
+        const dev = args[args.length - 1]!.includes("/instances")
+          ? host.dataDevice
+          : host.backupDevice;
+        return ok(
+          `Filesystem 1024-blocks Used Available Capacity Mounted on\n${dev} 100 1 99 1% /\n`,
+        );
       }
       if (command === "env" && args.includes("apt-get")) {
         if (host.aptResult.code === 0) {
