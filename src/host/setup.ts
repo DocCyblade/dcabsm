@@ -5,6 +5,13 @@ import { ensureDir, exists } from "../fsutil.ts";
 import { logChange } from "../log.ts";
 import { step } from "../output.ts";
 import { confirmOrCancel } from "../prompt.ts";
+import {
+  anyReleaseLoads,
+  checkReleaseVersion,
+  installRelease,
+  latestStable,
+  planRelease,
+} from "../release/install.ts";
 import type { Invocation } from "../table.ts";
 import { isInstalled, runChecks, type CheckResult, type Override } from "./checks.ts";
 import {
@@ -24,7 +31,11 @@ interface Dir {
 
 /** `host setup` (spec 10.2), up to the Host tree: refusals, plan, apt, `dcabsm.json` and `/srv/dcabsm`. */
 export async function hostSetup({ ctx, args }: Invocation): Promise<void> {
-  const flags = parseFlags(args, { yes: { type: "boolean" }, "backup-dir": { type: "string" } });
+  const flags = parseFlags(args, {
+    yes: { type: "boolean" },
+    "backup-dir": { type: "string" },
+    release: { type: "string" },
+  });
   const requested = flags["backup-dir"];
   if (requested !== undefined && !isAbsolute(requested)) {
     throw refusal(
@@ -32,6 +43,7 @@ export async function hostSetup({ ctx, args }: Invocation): Promise<void> {
       "Example: --backup-dir /mnt/backups/dcabsm",
     );
   }
+  if (flags.release !== undefined) checkReleaseVersion(flags.release);
   const stored = await readHostConfig(ctx);
 
   ctx.io.out("Setup checks (nothing changes yet)");
@@ -88,7 +100,12 @@ export async function hostSetup({ ctx, args }: Invocation): Promise<void> {
   const newOverrides = overrides.filter((o) => !stored?.unsupportedHost?.overrides.includes(o));
   const needConfig = stored === undefined || newOverrides.length > 0;
 
-  if (missingPackages.length === 0 && missingDirs.length === 0 && !needConfig) {
+  // Step 8 passes once any Release loads, so a re-run never pulls a newer one (spec 10.2).
+  const releasePlan = (await anyReleaseLoads(ctx))
+    ? undefined
+    : await planRelease(ctx, flags.release ?? (await latestStable(ctx)));
+
+  if (missingPackages.length === 0 && missingDirs.length === 0 && !needConfig && !releasePlan) {
     ctx.io.out("");
     ctx.io.out("Every check passes; nothing to do.");
     return;
@@ -100,6 +117,9 @@ export async function hostSetup({ ctx, args }: Invocation): Promise<void> {
     step(ctx, "info", `Install ${missingPackages.join(" and ")} with apt`);
   if (missingDirs.length > 0) step(ctx, "info", "Create /etc/dcabsm and /srv/dcabsm");
   step(ctx, "info", `Backups in ${backupDir}`);
+  if (releasePlan) {
+    step(ctx, "info", `Install Actual ${releasePlan.version} with its Node runtime`);
+  }
   await confirmOrCancel(ctx, "Go ahead?", { yes: flags.yes });
 
   if (missingPackages.length > 0) {
@@ -130,4 +150,5 @@ export async function hostSetup({ ctx, args }: Invocation): Promise<void> {
     await writeHostConfig(ctx, markUnsupported(base, newOverrides, today));
     step(ctx, "done", `${stored ? "Updated" : "Created"} /etc/dcabsm/dcabsm.json`);
   }
+  if (releasePlan) await installRelease(ctx, releasePlan);
 }
