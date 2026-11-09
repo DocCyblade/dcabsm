@@ -1,5 +1,5 @@
 import { parseArgs } from "node:util";
-import { refusal } from "./errors.ts";
+import { errorMessage, refusal } from "./errors.ts";
 
 type Spec = Record<string, { type: "boolean" | "string" }>;
 
@@ -13,6 +13,6 @@ export function parseFlags<S extends Spec>(args: string[], spec: S): Parsed<S> {
     const { values } = parseArgs({ args, options: spec, allowPositionals: false, strict: true });
     return values as Parsed<S>;
   } catch (err) {
-    throw refusal(err instanceof Error ? err.message : String(err), "See the list: dcabsm help");
+    throw refusal(errorMessage(err), "See the list: dcabsm help");
   }
 }

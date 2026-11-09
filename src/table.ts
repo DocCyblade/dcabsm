@@ -1,5 +1,7 @@
 import type { Context } from "./context.ts";
 import { hostSetup } from "./host/setup.ts";
+import { releaseInstall } from "./release/install.ts";
+import { releaseList } from "./release/list.ts";
 import { versionLine } from "./version.ts";
 
 export interface Invocation {
@@ -214,8 +216,15 @@ export const table: Noun[] = [
         name: "list",
         usage: "list",
         summary: "Installed Releases, their Node runtime and the Instances on them",
+        run: releaseList,
       },
-      { name: "install", usage: "install <v>", summary: "Install a Release", changes: true },
+      {
+        name: "install",
+        usage: "install <v>",
+        summary: "Install a Release",
+        changes: true,
+        run: releaseInstall,
+      },
       {
         name: "prune",
         usage: "prune [--yes]",

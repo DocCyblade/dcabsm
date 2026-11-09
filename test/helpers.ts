@@ -2,7 +2,9 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { CommandRunner, Context, Fetcher, Io, RunResult } from "../src/context.ts";
+import { makeWritable } from "../src/fsutil.ts";
 import { pathsUnder } from "../src/paths.ts";
+import { fakeNet, type FakeNet } from "./fakenet.ts";
 
 export const DEBIAN_13 = `PRETTY_NAME="Debian GNU/Linux 13 (trixie)"
 NAME="Debian GNU/Linux"
@@ -27,6 +29,7 @@ export interface Harness {
   answers: string[];
   asked: string[];
   root: string;
+  net: FakeNet;
   cleanup(): Promise<void>;
 }
 
@@ -39,13 +42,15 @@ export interface HarnessOptions {
   env?: Record<string, string | undefined>;
   /** The contents of /etc/os-release. Default: Debian 13. Null: no file. */
   osRelease?: string | null;
+  /** The faked npm, nodejs.org, gpgv, tar and Node. */
+  net?: FakeNet;
   runner?: (command: string, args: string[]) => RunResult;
 }
 
 /** A Context on a temporary root with the faked command runner and fetcher (spec 13.1). */
 export async function harness(opts: HarnessOptions = {}): Promise<Harness> {
   const root = await mkdtemp(join(tmpdir(), "dcabsm-test-"));
-  const paths = pathsUnder(root);
+  const paths = pathsUnder(root, join(root, "opt/dcabsm/test"));
   const osRelease = opts.osRelease === undefined ? DEBIAN_13 : opts.osRelease;
   if (osRelease !== null) {
     await mkdir(dirname(paths.osRelease), { recursive: true });
@@ -62,14 +67,20 @@ export async function harness(opts: HarnessOptions = {}): Promise<Harness> {
   const answers = [...(opts.answers ?? [])];
   const asked: string[] = [];
 
+  const net = opts.net ?? fakeNet();
   const runner: CommandRunner = {
     async run(command, args) {
       calls.push({ command, args });
-      return opts.runner?.(command, args) ?? { code: 0, stdout: "", stderr: "" };
+      return (
+        net.run(command, args) ??
+        opts.runner?.(command, args) ?? { code: 0, stdout: "", stderr: "" }
+      );
     },
   };
   const fetcher: Fetcher = {
     async fetch(url) {
+      const res = net.fetch(url);
+      if (res) return res;
       throw new Error(`unexpected fetch: ${url}`);
     },
   };
@@ -100,6 +111,10 @@ export async function harness(opts: HarnessOptions = {}): Promise<Harness> {
     answers,
     asked,
     root,
-    cleanup: () => rm(root, { recursive: true, force: true }),
+    net,
+    cleanup: async () => {
+      await makeWritable(root);
+      await rm(root, { recursive: true, force: true });
+    },
   };
 }
