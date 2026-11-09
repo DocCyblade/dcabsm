@@ -433,6 +433,9 @@ describe("instance list and show", () => {
       "INSTANCE  STATE    RELEASE  HOSTNAME          PORT",
       "shop      active   26.11.1  shop.example.org  15127",
       "two       stopped  26.11.1  two.example.org   15128",
+      "",
+      expect.stringMatching(/^DCABSM \S+$/),
+      "→ No update check yet: sudo dcabsm host check-updates",
     ]);
   });
 
