@@ -7,6 +7,7 @@ DocCyblade's Actual Budget Server Manager: a CLI that installs and maintains sev
 - `docs/cli.md`: every command, flag, prompt and message.
 - `GLOSSARY.md`: the domain terms. Use them exactly as written, with their capitals, such as Release, Instance, Host and Regroup.
 - `docs/adr/`: the reasons behind the larger choices. Read the relevant ADR before changing something it covers.
+- `docs/development.md`: the toolchain, the commands and where the code lives.
 - `docs/roadmap.md`: what's out of V1. Don't build roadmap items unasked.
 - `docs/git-workflow.md`: branches, PRs, merging, tags and remotes. Read it before any git work.
 
