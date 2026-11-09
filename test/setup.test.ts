@@ -1,5 +1,7 @@
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { dirname } from "node:path";
+import { completionScript } from "../src/completion.ts";
 import { afterEach, describe, expect, it } from "vitest";
 import { run } from "../src/cli.ts";
 import { nginxOrgInPolicy, parseListeners } from "../src/host/checks.ts";
@@ -25,6 +27,18 @@ const pathExists = (p: string) =>
     () => true,
     () => false,
   );
+
+describe("host setup and the completion script", () => {
+  it("writes it as an owned file with its hash recorded", async () => {
+    expect(await setup(fakeHost())).toBe(0);
+    const logical = "/usr/share/bash-completion/completions/dcabsm";
+    const text = await readFile(h.ctx.paths.under(logical), "utf8");
+    expect(text).toBe(completionScript());
+    expect((await readConfig()).ownedFiles[logical]).toBe(
+      createHash("sha256").update(text).digest("hex"),
+    );
+  });
+});
 
 describe("host setup on a clean Debian 13 VM", () => {
   it("installs nginx and openssl, then leaves the Host tree and dcabsm.json", async () => {

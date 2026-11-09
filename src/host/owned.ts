@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { completionScript } from "../completion.ts";
 import type { Context } from "../context.ts";
 import { lineDiff } from "../diff.ts";
 import { refusal } from "../errors.ts";
@@ -29,6 +30,7 @@ export const TIMER_PATH = "/etc/systemd/system/dcabsm-nightly.timer";
 export const NIGHTLY_PATH = "/etc/systemd/system/dcabsm-nightly.service";
 export const CONF_PATH = "/etc/nginx/conf.d/dcabsm.conf";
 export const DEFAULT_CONF_PATH = "/etc/nginx/conf.d/dcabsm-default.conf";
+export const COMPLETION_PATH = "/usr/share/bash-completion/completions/dcabsm";
 
 const HEADER = "# Owned by DCABSM. Changes are overwritten; `dcabsm host doctor` flags them.\n";
 
@@ -168,6 +170,7 @@ export async function hostOwnedFiles(ctx: Context, nightlyTime: string): Promise
     { path: TIMER_PATH, content: nightlyTimer(nightlyTime), mode: 0o644 },
     { path: NIGHTLY_PATH, content: nightlyService(), mode: 0o644 },
     { path: CONF_PATH, content: nginxInclude(), mode: 0o644 },
+    { path: COMPLETION_PATH, content: completionScript(), mode: 0o644 },
   ];
   // A default server DCABSM wrote earlier stays managed; otherwise another one wins.
   const ours = await exists(ctx.paths.under(DEFAULT_CONF_PATH));

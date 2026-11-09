@@ -105,6 +105,7 @@ describe("owned files written by host setup", () => {
       "/etc/systemd/system/dcabsm-nightly.service",
       TIMER,
       UNIT,
+      "/usr/share/bash-completion/completions/dcabsm",
     ]);
     expect(hashes[UNIT]).toBe(hashOf(await read(UNIT)));
   });
