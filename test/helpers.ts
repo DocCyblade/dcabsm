@@ -67,11 +67,13 @@ export async function harness(opts: HarnessOptions = {}): Promise<Harness> {
   const answers = [...(opts.answers ?? [])];
   const asked: string[] = [];
 
-  let slept = 0;
+  // The fake clock moves only when a command runs, by `opts.clockStepMs` (default 0).
+  let elapsedMs = 0;
   const net = opts.net ?? fakeNet();
   const runner: CommandRunner = {
     async run(command, args) {
       calls.push({ command, args });
+      elapsedMs += opts.clockStepMs ?? 0;
       return (
         net.run(command, args) ??
         opts.runner?.(command, args) ?? { code: 0, stdout: "", stderr: "" }
@@ -104,10 +106,7 @@ export async function harness(opts: HarnessOptions = {}): Promise<Harness> {
       uid: opts.uid ?? 0,
       arch: opts.arch ?? "x64",
       env: opts.env ?? {},
-      now: () => new Date(Date.parse("2026-11-09T12:00:00Z") + slept),
-      sleep: async (ms) => {
-        slept += ms;
-      },
+      now: () => new Date(Date.parse("2026-11-09T12:00:00Z") + elapsedMs),
     },
     out,
     err,

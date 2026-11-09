@@ -41,6 +41,4 @@ export interface Context {
   /** Environment variables, such as the `DCABSM_ALLOW_*` overrides. */
   env: Record<string, string | undefined>;
   now(): Date;
-  /** Waits between polls. Default: a real timer; tests advance a fake clock instead. */
-  sleep?(ms: number): Promise<void>;
 }

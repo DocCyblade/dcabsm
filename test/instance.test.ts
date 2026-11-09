@@ -374,7 +374,7 @@ describe("failures", () => {
   });
 
   it("fails and does not enable when /health never comes up within 120 s", async () => {
-    await start({ net: fakeNet({ serverUp: false }) });
+    await start({ net: fakeNet({ serverUp: false }), clockStepMs: 30_000 });
     expect(await shop()).toBe(1);
     expect(h.err[0]).toContain("did not pass verification within 120 s");
     expect(calls("systemctl").some((a) => a[0] === "enable" && a[1] === "dcabsm@shop")).toBe(false);
