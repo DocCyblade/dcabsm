@@ -8,6 +8,7 @@ import { linkedPatch } from "../release/node.ts";
 import { compareText, parseVersion } from "../release/semver.ts";
 import type { Invocation } from "../table.ts";
 import { VERSION } from "../version.ts";
+import { readHostConfig } from "./config.ts";
 
 const NODE_INDEX = "https://nodejs.org/dist/index.json";
 const NODE_SCHEDULE = "https://raw.githubusercontent.com/nodejs/Release/main/schedule.json";
@@ -191,6 +192,16 @@ export async function updateFooter(ctx: Context): Promise<UpdateFooter> {
     if (seen?.eol) lines.push(`→ Node ${major} is end of life: sudo dcabsm release update-node`);
   }
   return { lastCheck: formatTime(new Date(doc.checkedAt)), lines };
+}
+
+/** Everything beneath `instance list`'s table: a blank line, the status line and the `→` lines. */
+export async function instanceListFooter(ctx: Context): Promise<string[]> {
+  const footer = await updateFooter(ctx);
+  const nightly = (await readHostConfig(ctx))?.nightlyTime;
+  const parts = [`DCABSM ${VERSION}`];
+  if (nightly) parts.push(`Nightly run ${nightly}`);
+  if (footer.lastCheck) parts.push(`last check ${footer.lastCheck}`);
+  return ["", parts.join(" · "), ...footer.lines];
 }
 
 function formatTime(d: Date): string {

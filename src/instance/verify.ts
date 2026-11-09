@@ -5,8 +5,7 @@ import { CliError } from "../errors.ts";
 export const VERIFY_SECONDS = 120;
 const POLL_MS = 1000;
 
-const sleepFor = (ctx: Context, ms: number) =>
-  ctx.sleep ? ctx.sleep(ms) : new Promise<void>((resolve) => setTimeout(resolve, ms));
+const pause = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 async function getJson(ctx: Context, url: string): Promise<Record<string, any> | undefined> {
   try {
@@ -65,7 +64,7 @@ export async function verifyInstance(
     } else {
       last = `the unit is ${state || "not active"}`;
     }
-    await sleepFor(ctx, POLL_MS);
+    await pause(POLL_MS);
   }
   throw fail(last);
 }

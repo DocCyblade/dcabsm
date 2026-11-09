@@ -5,6 +5,7 @@ import type { Context } from "../context.ts";
 import { Cancelled, CliError, errorMessage, firstLine, refusal } from "../errors.ts";
 import { ensureDir, exists, writeFileAtomic } from "../fsutil.ts";
 import { hostHasIpv6 } from "../host/owned.ts";
+import { nginxTestFailure, systemctl } from "../host/system.ts";
 import { step } from "../output.ts";
 import {
   installedReleases,
@@ -125,12 +126,13 @@ async function resolveRelease(ctx: Context, wanted: string | undefined): Promise
   return version;
 }
 
-async function chown(ctx: Context, owner: string, path: string): Promise<void> {
-  await run(ctx, "chown", [owner, path]);
-}
-
 /** Creates the files, directories and certificate of one Instance, with spec 2.2 ownership. */
-async function lay(ctx: Context, name: string, record: InstanceRecord, release: string) {
+async function layOutInstanceFiles(
+  ctx: Context,
+  name: string,
+  record: InstanceRecord,
+  release: string,
+) {
   const dir = instanceDir(ctx, name);
   const account = accountOf(name);
   const rootGroup = `root:${account}`;
@@ -147,7 +149,7 @@ async function lay(ctx: Context, name: string, record: InstanceRecord, release: 
   ];
   for (const [path, mode, owner] of dirs) {
     await ensureDir(path, mode);
-    await chown(ctx, owner, path);
+    await run(ctx, "chown", [owner, path]);
   }
   await symlink(join(ctx.paths.releases, release), join(dir, "release"));
 
@@ -158,7 +160,7 @@ async function lay(ctx: Context, name: string, record: InstanceRecord, release: 
     0o600,
   );
   await writeFileAtomic(config, configJson(name, record), 0o640);
-  await chown(ctx, rootGroup, config);
+  await run(ctx, "chown", [rootGroup, config]);
 
   const nginx = join(dir, "nginx");
   await run(ctx, "openssl", [
@@ -238,7 +240,7 @@ export async function instanceCreate({ ctx, args }: Invocation): Promise<void> {
 
   const unit = `dcabsm@${name}`;
   try {
-    await lay(ctx, name, record, release);
+    await layOutInstanceFiles(ctx, name, record, release);
     step(ctx, "done", `Instance on Release ${release}, port ${record.port}`);
     step(ctx, "done", `Certificate for ${hostname}, ${SELF_SIGNED_DAYS} days left (self-signed)`);
     ctx.io.out(
@@ -248,11 +250,9 @@ export async function instanceCreate({ ctx, args }: Invocation): Promise<void> {
       "  but offline use and installing as an app need a certificate the device trusts. Bring one later: sudo dcabsm cert update <name> --cert <file> --key <file>",
     );
 
-    const test = await ctx.runner.run("nginx", ["-t"]);
-    if (test.code !== 0) {
-      throw new CliError(`nginx -t failed: ${firstLine(test.stderr, `exit ${test.code}`)}`);
-    }
-    await run(ctx, "systemctl", ["reload", "nginx"]);
+    const failure = await nginxTestFailure(ctx);
+    if (failure) throw new CliError(`nginx -t failed: ${failure}`);
+    await systemctl(ctx, "reload", "nginx");
     step(ctx, "done", "Nginx: nginx -t passed, reloaded");
   } catch (err) {
     // One bad vhost would block every reload on the Host, so nothing of it may stay (spec 5.5).
@@ -263,9 +263,9 @@ export async function instanceCreate({ ctx, args }: Invocation): Promise<void> {
       : new CliError(`Could not create ${name}: ${errorMessage(err)}`);
   }
 
-  await run(ctx, "systemctl", ["start", unit]);
+  await systemctl(ctx, "start", unit);
   const seconds = await verifyInstance(ctx, name, record.port, release);
-  await run(ctx, "systemctl", ["enable", unit]);
+  await systemctl(ctx, "enable", unit);
   step(ctx, "done", `Started and verified: /health UP, /info ${release} (${seconds}s)`);
 
   ctx.io.out("");
