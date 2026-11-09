@@ -8,7 +8,7 @@ export interface ConfirmFlags {
   confirm?: string;
 }
 
-function noTerminal(flag: string) {
+export function noTerminal(flag: string) {
   return refusal("No terminal to confirm on.", `Re-run with ${flag} to proceed without asking.`);
 }
 

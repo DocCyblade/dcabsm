@@ -83,14 +83,14 @@ async function dispatch(argv: string[], ctx: Context): Promise<number> {
   }
 
   if (!isChanging(verb, args)) {
-    await handler({ ctx, args });
-    return EXIT_OK;
+    return (await handler({ ctx, args })) ?? EXIT_OK;
   }
 
   const name = `${noun.name} ${verb.name}`;
   const release = await acquireLock(ctx, commandLine);
+  let code: void | number;
   try {
-    await handler({ ctx, args });
+    code = await handler({ ctx, args });
   } catch (err) {
     await logChange(ctx, name, err instanceof Cancelled ? "cancelled" : "failed");
     throw err;
@@ -98,5 +98,5 @@ async function dispatch(argv: string[], ctx: Context): Promise<number> {
     await release();
   }
   await logChange(ctx, name, "ok");
-  return EXIT_OK;
+  return code ?? EXIT_OK;
 }
