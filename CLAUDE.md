@@ -13,3 +13,17 @@ DocCyblade's Actual Budget Server Manager: a CLI that installs and maintains sev
 - `main` is published and runs CI. Changes reach it only through a pull request (spec 13.3).
 - Jump-start work happens on `docs/v1-jumpstart` until it is ready to merge.
 - Remotes: `origin` (GitHub, public) and `Backup`. Push work branches to `Backup`. Push to `origin` only when asked.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues for DocCyblade/dcabsm, via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default role labels: needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: the root `GLOSSARY.md` plus `docs/adr/`. See `docs/agents/domain.md`.
