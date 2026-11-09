@@ -85,7 +85,7 @@ describe("usage errors", () => {
 
   it("exits 1 for a command whose ticket hasn't built it yet", async () => {
     h = await harness();
-    expect(await run(["instance", "list"], h.ctx)).toBe(1);
-    expect(h.err[0]).toBe("error: instance list is not built yet.");
+    expect(await run(["cert", "test"], h.ctx)).toBe(1);
+    expect(h.err[0]).toBe("error: cert test is not built yet.");
   });
 });

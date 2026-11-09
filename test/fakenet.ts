@@ -30,6 +30,10 @@ export interface FakeNet {
   nativeFails: boolean;
   /** Directories whose native-module check fails, whatever `nativeFails` says. */
   brokenDirs: string[];
+  /** Whether a started Instance's `/health` answers UP. */
+  serverUp: boolean;
+  /** The version a started Instance's `/info` reports. */
+  serverVersion: string;
   /** Everything fetched, in order. */
   fetched: string[];
   fetch(url: string): FetchResult | undefined;
@@ -62,6 +66,8 @@ export function fakeNet(overrides: Partial<FakeNet> = {}): FakeNet {
     badChecksum: false,
     nativeFails: false,
     brokenDirs: [],
+    serverUp: true,
+    serverVersion: "26.11.1",
     fetched: [],
     ...overrides,
     fetch(url) {
@@ -85,6 +91,13 @@ export function fakeNet(overrides: Partial<FakeNet> = {}): FakeNet {
           version: v,
           engines: engines ? { node: engines } : {},
         });
+      }
+      const local = /^http:\/\/127\.0\.0\.1:\d+\/(health|info)$/.exec(url);
+      if (local) {
+        if (!net.serverUp) return { status: 502, body: enc("down") };
+        return local[1] === "health"
+          ? json({ status: "UP" })
+          : json({ build: { name: "@actual-app/sync-server", version: net.serverVersion } });
       }
       if (url === "https://nodejs.org/dist/index.json") return json(net.index);
       const dist = /^https:\/\/nodejs\.org\/dist\/v([\d.]+)\/(.+)$/.exec(url);
