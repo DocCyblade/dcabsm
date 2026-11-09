@@ -31,3 +31,29 @@ jobs:
         run: node dist/dcabsm.js --version
       - name: The build leaves the completion script
         run: test -s dist/share/bash-completion/completions/dcabsm
+
+  tarballs:
+    name: tarballs
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      # Fetches the pinned Node for each architecture and checks it against nodejs.org's signed
+      # SHASUMS256.txt. Nothing is signed here: the author signs SHA256SUMS on their own machine.
+      - name: Build both tarballs and SHA256SUMS
+        run: npm run package
+      - name: The tarballs match SHA256SUMS
+        run: cd dist/release && sha256sum --check SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-files
+          path: |
+            dist/release/*.tar.gz
+            dist/release/SHA256SUMS
+            install.sh
+          if-no-files-found: error
