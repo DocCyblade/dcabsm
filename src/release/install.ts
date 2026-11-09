@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseFlags } from "../args.ts";
 import type { Context } from "../context.ts";
@@ -138,6 +138,8 @@ export async function installRelease(ctx: Context, plan: Plan): Promise<void> {
     step(ctx, "done", `Native modules load: ${NATIVE_MODULES.join(", ")}`);
 
     await writeFile(join(work, NODE_MAJOR_FILE), `${major}\n`);
+    // The unit's PATH starts at release/node/bin (spec 4.5); the link follows node/<major> across patches.
+    await symlink(join(ctx.paths.node, String(major)), join(work, "node"));
     const final = join(ctx.paths.releases, version);
     await rename(work, final);
     await makeReadOnly(final);

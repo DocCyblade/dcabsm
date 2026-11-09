@@ -67,6 +67,9 @@ describe("choosing the Node runtime", () => {
       await readFile(join(h.ctx.paths.releases, "26.11.0", ".dcabsm-node-major"), "utf8"),
     ).toBe("22\n");
     expect(await names(h.ctx.paths.node)).toEqual(["22", "22.21.0"]);
+    expect(await readlink(join(h.ctx.paths.releases, "26.11.0", "node"))).toBe(
+      join(h.ctx.paths.node, "22"),
+    );
   });
 
   it("never goes past the ceiling, even for a Node that is newer and LTS", async () => {
