@@ -37,7 +37,7 @@ export async function systemctl(ctx: Context, ...args: string[]): Promise<void> 
   if (res.code !== 0) {
     throw new CliError(
       `systemctl ${args.join(" ")} failed: ${firstLine(res.stderr, `exit ${res.code}`)}`,
-      "Fix the problem, then run again: sudo dcabsm host setup",
+      "Fix the problem, then run the command again",
     );
   }
 }
