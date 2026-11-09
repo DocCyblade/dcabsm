@@ -16,3 +16,21 @@ export function parseFlags<S extends Spec>(args: string[], spec: S): Parsed<S> {
     throw refusal(errorMessage(err), "See the list: dcabsm help");
   }
 }
+
+/** Like `parseFlags`, but also returns the positional arguments, such as an Instance name. */
+export function parseCommand<S extends Spec>(
+  args: string[],
+  spec: S,
+): { values: Parsed<S>; positionals: string[] } {
+  try {
+    const { values, positionals } = parseArgs({
+      args,
+      options: spec,
+      allowPositionals: true,
+      strict: true,
+    });
+    return { values: values as Parsed<S>, positionals };
+  } catch (err) {
+    throw refusal(errorMessage(err), "See the list: dcabsm help");
+  }
+}
