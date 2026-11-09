@@ -67,6 +67,7 @@ export async function harness(opts: HarnessOptions = {}): Promise<Harness> {
   const answers = [...(opts.answers ?? [])];
   const asked: string[] = [];
 
+  let slept = 0;
   const net = opts.net ?? fakeNet();
   const runner: CommandRunner = {
     async run(command, args) {
@@ -103,7 +104,10 @@ export async function harness(opts: HarnessOptions = {}): Promise<Harness> {
       uid: opts.uid ?? 0,
       arch: opts.arch ?? "x64",
       env: opts.env ?? {},
-      now: () => new Date("2026-11-09T12:00:00Z"),
+      now: () => new Date(Date.parse("2026-11-09T12:00:00Z") + slept),
+      sleep: async (ms) => {
+        slept += ms;
+      },
     },
     out,
     err,

@@ -342,7 +342,7 @@ describe("Releases and Node", () => {
   it("warns about a Node major that is end of life", async () => {
     const net = fakeNet();
     await setUpHost(fakeHost(), { net });
-    net.schedule["v24"] = { end: "2026-10-01" };
+    net.nodeEnd["v24"] = "2026-10-01";
     expect(await doctor()).toBe(1);
     expect(text()).toContain("! Node 24 is end of life since 2026-10-01");
   });
