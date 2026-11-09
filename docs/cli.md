@@ -159,6 +159,25 @@ Ordinary commands never use the network. Only `host check-updates`, Release and 
 
 Commands that change state take a Host-wide lock, so two can't change things at once. `host doctor` without `--fix` takes no lock and is safe to run at any time.
 
+If another command holds the lock, an interactive command fails at once with exit 1, naming the holder (its pid and command line), and does not wait:
+
+```
+error: Another dcabsm command is running (pid 4121: dcabsm instance upgrade --all).
+  Wait for it to finish, then run again: sudo dcabsm backup create --all
+```
+
+A lock left behind by a process that has died is taken over. Only the Nightly run waits for the lock, for up to 10 minutes (spec 8.2).
+
+### Logging
+
+Every changing command logs one line to journald when it ends, with the command and its outcome (`ok`, `failed` or `cancelled`), under the `dcabsm` tag:
+
+```
+dcabsm: backup create: ok
+```
+
+Read them with `journalctl -t dcabsm`. A failure to log never fails the command. The Nightly run's summary is the journal of its service: `journalctl -u dcabsm-nightly`.
+
 ## Installing DCABSM
 
 `install.sh` is not a `dcabsm` command, but it is the first thing a System Admin runs. Read it first, then run `sudo bash install.sh`. The README lists the same steps by hand.

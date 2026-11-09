@@ -1,0 +1,28 @@
+{
+  "name": "dcabsm",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DocCyblade's Actual Budget Server Manager",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "oxlint",
+    "format": "oxfmt src test scripts",
+    "format:check": "oxfmt --check src test scripts",
+    "check": "npm run typecheck && npm run lint && npm run format:check && npm test"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "esbuild": "0.28.2",
+    "oxfmt": "0.78.0",
+    "oxlint": "1.93.0",
+    "typescript": "7.0.2",
+    "vitest": "5.1.0"
+  },
+  "engines": {
+    "node": ">=24.22.2 <25"
+  }
+}
