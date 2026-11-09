@@ -1,5 +1,6 @@
 import type { Context } from "./context.ts";
 import { hostSetup } from "./host/setup.ts";
+import { hostCheckUpdates } from "./host/updates.ts";
 import { releaseInstall } from "./release/install.ts";
 import { releaseList } from "./release/list.ts";
 import { versionLine } from "./version.ts";
@@ -59,6 +60,7 @@ export const table: Noun[] = [
         name: "check-updates",
         usage: "check-updates",
         summary: "Look for a newer Actual Release, Node patch and DCABSM version",
+        run: hostCheckUpdates,
       },
       { name: "settings", usage: "settings", summary: "Show the Host settings" },
       {
