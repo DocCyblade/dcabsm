@@ -39,6 +39,7 @@ describe("owned files written by host setup", () => {
       `Environment=ACTUAL_DATA_DIR=${i}/data`,
       "Environment=NODE_ENV=production",
       `ConditionPathExists=!${i}/.changing-release`,
+      `ConditionPathExists=${i}/release/node/bin/node`,
       "Restart=on-failure",
       "RestartSec=5",
       "StartLimitBurst=3",

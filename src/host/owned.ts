@@ -40,6 +40,7 @@ export function unitTemplate(): string {
   return `${HEADER}[Unit]
 Description=Actual Budget server (Instance %i)
 ConditionPathExists=!${dir}/.changing-release
+ConditionPathExists=${dir}/release/node/bin/node
 StartLimitIntervalSec=300
 StartLimitBurst=3
 
