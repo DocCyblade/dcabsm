@@ -4,12 +4,10 @@ import { parseCommand } from "../args.ts";
 import type { Context } from "../context.ts";
 import { refusal } from "../errors.ts";
 import { exists } from "../fsutil.ts";
-import { readHostConfig } from "../host/config.ts";
-import { updateFooter } from "../host/updates.ts";
+import { instanceListFooter } from "../host/updates.ts";
 import { releaseNodeMajor } from "../release/install.ts";
 import { linkedPatch } from "../release/node.ts";
 import type { Invocation } from "../table.ts";
-import { VERSION } from "../version.ts";
 import {
   accountOf,
   instanceDir,
@@ -74,14 +72,7 @@ export async function instanceList({ ctx }: Invocation): Promise<void> {
     return;
   }
   for (const line of renderInstanceTable(rows)) ctx.io.out(line);
-  const footer = await updateFooter(ctx);
-  const nightly = (await readHostConfig(ctx))?.nightlyTime;
-  const parts = [`DCABSM ${VERSION}`];
-  if (nightly) parts.push(`Nightly run ${nightly}`);
-  if (footer.lastCheck) parts.push(`last check ${footer.lastCheck}`);
-  ctx.io.out("");
-  ctx.io.out(parts.join(" · "));
-  for (const line of footer.lines) ctx.io.out(line);
+  for (const line of await instanceListFooter(ctx)) ctx.io.out(line);
 }
 
 /** `instance show <name>` */

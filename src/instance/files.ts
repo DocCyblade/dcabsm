@@ -26,6 +26,8 @@ export function configJson(name: string, record: InstanceRecord): string {
 export function vhostConf(name: string, record: InstanceRecord, ipv6: boolean): string {
   const dir = logicalDir(name);
   const listen80 = `    listen 80;\n${ipv6 ? "    listen [::]:80;\n" : ""}`;
+  // The +1 leaves Nginx slightly above Actual's own limit. Once the spec 4.11 settings exist, it is added
+  // to the largest upload limit configured rather than to the default.
   return `${HEADER}server {
 ${listen443(ipv6, "ssl")}    server_name ${record.hostname};
     ssl_certificate ${dir}/nginx/cert.pem;

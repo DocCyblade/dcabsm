@@ -39,6 +39,8 @@ export interface HarnessOptions {
   answers?: string[];
   setUp?: boolean;
   arch?: string;
+  /** How far each command run moves the fake clock, so a Verification wait can time out. */
+  clockStepMs?: number;
   env?: Record<string, string | undefined>;
   /** The contents of /etc/os-release. Default: Debian 13. Null: no file. */
   osRelease?: string | null;

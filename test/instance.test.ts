@@ -24,6 +24,7 @@ interface Start {
   releases?: string[];
   ipv6?: boolean;
   hostOverrides?: Partial<FakeHost>;
+  clockStepMs?: number;
   /** Runs before the fake host's own answer; return a result to override it. */
   runner?: (command: string, args: string[]) => RunResult | undefined;
 }
@@ -34,6 +35,7 @@ async function start(o: Start = {}): Promise<void> {
   h = await harness({
     net: o.net ?? fakeNet({ serverVersion: "26.11.1" }),
     interactive: o.interactive,
+    clockStepMs: o.clockStepMs,
     answers: o.answers,
     runner: (command, args) => {
       const own = o.runner?.(command, args);
