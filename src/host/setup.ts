@@ -1,11 +1,13 @@
 import { isAbsolute } from "node:path";
 import { parseFlags } from "../args.ts";
-import { CliError, refusal } from "../errors.ts";
+import type { Context } from "../context.ts";
+import { Cancelled, CliError, refusal } from "../errors.ts";
 import { ensureDir, exists } from "../fsutil.ts";
 import { logChange } from "../log.ts";
 import { step } from "../output.ts";
-import { confirmOrCancel } from "../prompt.ts";
+import { confirm, confirmOrCancel } from "../prompt.ts";
 import type { Invocation } from "../table.ts";
+import type { InspectedFile } from "./owned.ts";
 import { isInstalled, runChecks, type CheckResult, type Override } from "./checks.ts";
 import {
   DEFAULT_BACKUP_DIR,
@@ -14,6 +16,14 @@ import {
   readHostConfig,
   writeHostConfig,
 } from "./config.ts";
+import {
+  hostOwnedFiles,
+  inspectOwnedFiles,
+  isNginxFile,
+  pending,
+  resolveDrift,
+  writeOwnedFiles,
+} from "./owned.ts";
 
 const PACKAGES = ["nginx", "openssl"];
 
@@ -87,12 +97,27 @@ export async function hostSetup({ ctx, args }: Invocation): Promise<void> {
   for (const dir of dirs) if (!(await exists(dir.path))) missingDirs.push(dir);
   const newOverrides = overrides.filter((o) => !stored?.unsupportedHost?.overrides.includes(o));
   const needConfig = stored === undefined || newOverrides.length > 0;
+  const nightlyTime = stored?.nightlyTime ?? defaultHostConfig(backupDir).nightlyTime;
+  const inspected = await inspectOwnedFiles(
+    ctx,
+    await hostOwnedFiles(ctx, nightlyTime),
+    stored?.ownedFiles ?? {},
+  );
+  const ownedWork = pending(inspected);
 
-  if (missingPackages.length === 0 && missingDirs.length === 0 && !needConfig) {
+  if (
+    missingPackages.length === 0 &&
+    missingDirs.length === 0 &&
+    !needConfig &&
+    ownedWork.length === 0
+  ) {
     ctx.io.out("");
     ctx.io.out("Every check passes; nothing to do.");
     return;
   }
+
+  // Edited files are decided before anything changes (spec 10.5).
+  const replace = await resolveDrift(ctx, inspected, flags);
 
   ctx.io.out("");
   ctx.io.out("Plan");
@@ -100,6 +125,12 @@ export async function hostSetup({ ctx, args }: Invocation): Promise<void> {
     step(ctx, "info", `Install ${missingPackages.join(" and ")} with apt`);
   if (missingDirs.length > 0) step(ctx, "info", "Create /etc/dcabsm and /srv/dcabsm");
   step(ctx, "info", `Backups in ${backupDir}`);
+  if (ownedWork.length > 0)
+    step(
+      ctx,
+      "info",
+      `Write dcabsm@.service, dcabsm-nightly.timer (${nightlyTime}), Nginx conf.d files`,
+    );
   await confirmOrCancel(ctx, "Go ahead?", { yes: flags.yes });
 
   if (missingPackages.length > 0) {
@@ -130,4 +161,71 @@ export async function hostSetup({ ctx, args }: Invocation): Promise<void> {
     await writeHostConfig(ctx, markUnsupported(base, newOverrides, today));
     step(ctx, "done", `${stored ? "Updated" : "Created"} /etc/dcabsm/dcabsm.json`);
   }
+
+  if (ownedWork.length > 0 || missingPackages.length > 0) {
+    await installOwnedFiles(ctx, inspected, replace, {
+      hashes: stored?.ownedFiles ?? {},
+      nginxWasInstalled: !missingPackages.includes("nginx"),
+      yes: flags.yes,
+    });
+  }
+}
+
+async function systemctl(ctx: Context, ...args: string[]): Promise<void> {
+  const res = await ctx.runner.run("systemctl", args);
+  if (res.code !== 0) {
+    const reason = res.stderr.split("\n").find((l) => l.trim() !== "") ?? `exit ${res.code}`;
+    throw new CliError(
+      `systemctl ${args.join(" ")} failed: ${reason.trim()}`,
+      "Fix the problem, then run again: sudo dcabsm host setup",
+    );
+  }
+}
+
+/** Step 7 of spec 10.2: units, `conf.d` files, `nginx -t`, Nginx up and enabled, timer enabled. */
+async function installOwnedFiles(
+  ctx: Context,
+  inspected: InspectedFile[],
+  replace: Set<string>,
+  opts: { hashes: Record<string, string>; nginxWasInstalled: boolean; yes?: boolean },
+): Promise<void> {
+  const result = await writeOwnedFiles(ctx, inspected, replace, opts.hashes);
+  const config = (await readHostConfig(ctx)) ?? {};
+  await writeHostConfig(ctx, { ...config, ownedFiles: result.hashes });
+  if (result.written.length > 0) {
+    step(ctx, "done", `Wrote ${result.written.map((p) => p.split("/").pop()).join(", ")}`);
+  }
+
+  const nginxChanged = result.written.some((p) =>
+    isNginxFile(inspected.find((i) => i.file.path === p)!.file),
+  );
+  await systemctl(ctx, "daemon-reload");
+  await systemctl(ctx, "enable", "dcabsm-nightly.timer");
+  await systemctl(ctx, "start", "dcabsm-nightly.timer");
+  step(ctx, "done", "dcabsm-nightly.timer enabled");
+
+  const test = await ctx.runner.run("nginx", ["-t"]);
+  if (test.code !== 0) {
+    const reason = test.stderr.split("\n").find((l) => l.trim() !== "") ?? "no reason given";
+    throw new CliError(
+      `nginx -t failed after the change: ${reason.trim()}`,
+      "Nginx was not reloaded. Fix the config, then run again: sudo dcabsm host setup",
+    );
+  }
+  const active = (await ctx.runner.run("systemctl", ["is-active", "--quiet", "nginx"])).code === 0;
+  if (active) {
+    if (nginxChanged) await systemctl(ctx, "reload", "nginx");
+    step(ctx, "done", `Nginx: nginx -t passed${nginxChanged ? ", reloaded" : ""}`);
+    await systemctl(ctx, "enable", "nginx");
+    return;
+  }
+  if (opts.nginxWasInstalled) {
+    const start = await confirm(ctx, "Nginx is installed but stopped. Start and enable it?", {
+      yes: opts.yes,
+      defaultYes: true,
+    });
+    if (!start) throw new Cancelled("Nginx left stopped. Run setup again to start it.");
+  }
+  await systemctl(ctx, "enable", "--now", "nginx");
+  step(ctx, "done", "Nginx: nginx -t passed, started, enabled");
 }
