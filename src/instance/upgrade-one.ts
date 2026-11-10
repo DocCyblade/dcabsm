@@ -9,6 +9,7 @@ import { writeConfigJson } from "./files.ts";
 import { unitStateOf } from "./list.ts";
 import { instanceDir, removeMarker, writeMarker, type InstanceRecord } from "./record.ts";
 import { restoreData } from "./restore-data.ts";
+import { withStartGate } from "./start-gate.ts";
 import { repointRelease, switchRelease } from "./switch.ts";
 import { verifyInstance } from "./verify.ts";
 
@@ -38,6 +39,10 @@ async function startAndVerify(ctx: Context, job: UpgradeJob, release: string): P
   const seconds = await verifyInstance(ctx, job.name, job.record.port, release);
   step(ctx, "done", `Started and verified: /health UP, /info ${release} (${seconds}s)`);
 }
+
+/** The same with the marker in place, so the unit's marker rule is lifted for this start (spec 6.1). */
+const startAndVerifyChanging = (ctx: Context, job: UpgradeJob, release: string): Promise<void> =>
+  withStartGate(ctx, job.name, () => startAndVerify(ctx, job, release));
 
 /** The Instance never started, so it has no data: it only changes Release (spec 6.1). */
 async function changeReleaseOnly(ctx: Context, job: UpgradeJob): Promise<Outcome> {
@@ -101,7 +106,7 @@ async function rollBack(
     step(ctx, "done", `Restored data from ${backup.split("/").at(-1)}`);
     await switchRelease(ctx, name, job.record, from);
     step(ctx, "done", `Switched back to ${from}`);
-    await startAndVerify(ctx, job, from);
+    await startAndVerifyChanging(ctx, job, from);
   } catch (err) {
     await systemctl(ctx, "stop", unit(name)).catch(() => undefined);
     step(ctx, "failed", `Automatic rollback failed: ${errorMessage(err)}`);
@@ -136,7 +141,7 @@ export async function upgradeInstance(ctx: Context, job: UpgradeJob): Promise<Ou
   try {
     await writeConfigJson(ctx, name, job.record, to);
     step(ctx, "done", `Switched to ${to}, config.json regenerated`);
-    await startAndVerify(ctx, job, to);
+    await startAndVerifyChanging(ctx, job, to);
   } catch (err) {
     step(ctx, "failed", errorMessage(err));
     return rollBack(ctx, job, backup, errorMessage(err), wasUp);

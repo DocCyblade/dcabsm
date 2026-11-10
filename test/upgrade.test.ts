@@ -1,9 +1,10 @@
-import { readFileSync, readlinkSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readlinkSync, writeFileSync } from "node:fs";
 import { mkdir, readFile, readdir, readlink, stat, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { run } from "../src/cli.ts";
 import type { RunResult } from "../src/context.ts";
+import { gateDir } from "../src/instance/start-gate.ts";
 import { fakeHost, type FakeHost } from "./fakehost.ts";
 import { fakeNet, type FakeNet } from "./fakenet.ts";
 import { harness, type Harness } from "./helpers.ts";
@@ -18,7 +19,7 @@ let failed: Set<string>;
 /** What the "new Release" does to the data when it starts (a migration). */
 let migrates = false;
 /** Marker contents seen at each start. */
-let markers: Array<{ unit: string; marker: string | undefined }>;
+let markers: Array<{ unit: string; marker: string | undefined; gate: boolean }>;
 afterEach(() => h.cleanup());
 
 const ok = (stdout = ""): RunResult => ({ code: 0, stdout, stderr: "" });
@@ -30,7 +31,10 @@ const out = () => h.out.join("\n");
 const linked = async (name: string) => basename(await readlink(inst(name, "release")));
 const sysctls = () =>
   h.calls
-    .filter((c) => c.command === "systemctl" && !["is-active", "show"].includes(c.args[0]!))
+    .filter(
+      (c) =>
+        c.command === "systemctl" && !["is-active", "show", "daemon-reload"].includes(c.args[0]!),
+    )
     .map((c) => c.args.join(" "));
 
 interface Options {
@@ -102,7 +106,9 @@ function onStart(unit: string): void {
   } catch {
     marker = undefined;
   }
-  markers.push({ unit, marker });
+  // The unit skips a start while the marker exists, unless the start gate lifts that rule (spec 6.1).
+  const gate = existsSync(`${gateDir(h.ctx, name)}/10-start-gate.conf`);
+  markers.push({ unit, marker, gate });
   failed.delete(name);
   net.serverVersion = broken.has(version) ? "0.0.0" : version;
   if (migrates && version === "26.11.1") {
@@ -119,7 +125,9 @@ describe("instance upgrade", () => {
     expect(sysctls()).toEqual(["stop dcabsm@shop", "start dcabsm@shop"]);
     // The Pre-upgrade backup holds the old Release's name.
     expect(await readdir(backups("shop"))).toEqual(["20261109T120000Z-pre-upgrade-26.11.0.tar.gz"]);
-    // The marker was there during the start, and says what spec 6.6 asks.
+    // The marker was there during the start, with the gate open so systemd really starts the unit.
+    expect(markers.at(-1)!.gate).toBe(true);
+    await expect(stat(gateDir(h.ctx, "shop"))).rejects.toThrow();
     const seen = JSON.parse(markers.at(-1)!.marker!);
     expect(seen).toEqual({
       operation: "upgrade",
@@ -291,6 +299,7 @@ describe("a failed Verification", () => {
     expect(h.calls.some((c) => c.command === "tar" && c.args[0] === "-xzf")).toBe(true);
     expect(h.calls.some((c) => c.command === "chown" && c.args[0] === "-R")).toBe(true);
     expect(markers.at(-1)!.marker).toContain('"restoringData": true');
+    expect(markers.slice(-2).map((m) => m.gate)).toEqual([true, true]);
     expect(out()).toContain("Rolling back automatically");
     expect(out()).toContain("Restored data from 20261109T120000Z-pre-upgrade-26.11.0.tar.gz");
     expect(out()).toContain("Switched back to 26.11.0");
