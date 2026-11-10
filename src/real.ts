@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { createInterface } from "node:readline/promises";
 import type { CommandRunner, Fetcher, Io } from "./context.ts";
 
@@ -9,6 +9,12 @@ export const realRunner: CommandRunner = {
         const code = error ? (typeof error.code === "number" ? error.code : 1) : 0;
         resolve({ code, stdout, stderr });
       });
+    }),
+  inherit: (command, args) =>
+    new Promise((resolve) => {
+      const child = spawn(command, args, { stdio: "inherit" });
+      child.on("error", () => resolve(1));
+      child.on("close", (code) => resolve(code ?? 0));
     }),
 };
 
