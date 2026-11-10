@@ -19,6 +19,7 @@ import { selfMigrate } from "./self/migrations.ts";
 import { selfRefresh } from "./self/refresh.ts";
 import { selfUpdate } from "./self/update.ts";
 import { releasePrune } from "./release/prune.ts";
+import { releaseUpdateNode } from "./release/update-node.ts";
 import { versionLine } from "./version.ts";
 
 export interface Invocation {
@@ -283,6 +284,7 @@ export const table: Noun[] = [
         usage: "update-node [--yes]",
         summary: "Install a Node patch and restart the Instances on it",
         changes: true,
+        run: releaseUpdateNode,
       },
     ],
   },
