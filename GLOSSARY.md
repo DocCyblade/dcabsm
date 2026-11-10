@@ -68,6 +68,18 @@ _Avoid_: Downgrade, revert
 Moving DCABSM itself to another version. It never changes an Instance's Release.
 _Avoid_: Upgrade (that is for Instances), update
 
+**Layout**:
+The version number of how DCABSM stores its state on the Host, kept in `dcabsm.json`. Each DCABSM version expects one Layout, and a Self-update migrates the Host forward to it.
+_Avoid_: Schema, format version
+
+**Owned file**:
+A file DCABSM writes on the Host outside an Instance, such as the systemd unit or the Nightly run timer. It is rewritten only while it still matches what DCABSM last wrote, so a file the System Admin edited is kept.
+_Avoid_: Managed file, config file
+
+**TurnKey**:
+TurnKey Linux, a family of appliance images on Debian. Only TurnKey Core and TurnKey Node.js are supported Hosts, and setup disables the pieces of them that clash with DCABSM.
+_Avoid_: Appliance (on its own), TKL
+
 **Backup**:
 One archive of a whole Instance at one moment, taken while it is stopped. Each records its kind, such as manual, scheduled, pre-upgrade, pre-restore, pre-clone or final.
 _Avoid_: Snapshot, export (Actual's export is one Budget file)

@@ -5,7 +5,7 @@ import { healthChecks } from "./health.ts";
 import { detectOs, supportedNames } from "./os.ts";
 import { isInstalled } from "./system.ts";
 import { treeChecks } from "./tree.ts";
-import { detectTurnkey, turnkeyChecks } from "./turnkey.ts";
+import { detectTurnkey, turnkeyChecks, type TurnkeyState } from "./turnkey.ts";
 
 export { isInstalled };
 
@@ -43,12 +43,22 @@ export type Refusal = Extract<CheckResult, { kind: "problem" }>;
 export interface Check {
   id: string;
   refuses?: boolean;
-  run(ctx: Context): Promise<CheckResult[]>;
+  run(ctx: Context, facts: HostFacts): Promise<CheckResult[]>;
+}
+
+/** What the checks of one run learn about the Host once and share, so a run looks at each thing a single time. */
+export interface HostFacts {
+  turnkey(): Promise<TurnkeyState>;
+}
+
+export function hostFacts(ctx: Context): HostFacts {
+  let turnkey: Promise<TurnkeyState> | undefined;
+  return { turnkey: () => (turnkey ??= detectTurnkey(ctx)) };
 }
 
 const RERUN = "then run again: sudo dcabsm host setup";
 
-async function osCheck(ctx: Context): Promise<CheckResult> {
+async function osCheck(ctx: Context, facts: HostFacts): Promise<CheckResult> {
   const os = await detectOs(ctx);
   if (!os.supported) {
     return {
@@ -58,7 +68,7 @@ async function osCheck(ctx: Context): Promise<CheckResult> {
       hint: `Supported: ${supportedNames()}. See the README for architectures.`,
     };
   }
-  const turnkey = await detectTurnkey(ctx);
+  const turnkey = await facts.turnkey();
   if (turnkey.kind === "supported")
     return { kind: "pass", label: `${turnkey.label} (${os.supported.name}), ${os.arch}` };
   const codename = os.codename ? ` (${os.codename})` : "";
@@ -201,22 +211,24 @@ async function nginxConfigCheck(ctx: Context): Promise<CheckResult> {
   return { kind: "pass", label: "The existing Nginx config passes nginx -t" };
 }
 
-const refusing = (id: string, test: (ctx: Context) => Promise<CheckResult>): Check => ({
+const refusing = (
+  id: string,
+  test: (ctx: Context, facts: HostFacts) => Promise<CheckResult>,
+): Check => ({
   id,
   refuses: true,
-  run: async (ctx) => [await test(ctx)],
+  run: async (ctx, facts) => [await test(ctx, facts)],
 });
 
 /** Every Host check, in the order doctor reports them (spec 10.6). The refusing ones also refuse in setup (spec 10.3). */
 export const hostChecks: Check[] = [
   refusing("os", osCheck),
-  turnkeyChecks[0]!,
+  ...turnkeyChecks,
   refusing("proxmox", proxmoxCheck),
   refusing("container", containerCheck),
   refusing("nginx-origin", nginxOrgCheck),
   refusing("ports", portsCheck),
   refusing("nginx-config", nginxConfigCheck),
-  turnkeyChecks[1]!,
   ...healthChecks,
   ...treeChecks,
 ];
@@ -224,6 +236,9 @@ export const hostChecks: Check[] = [
 /** Setup runs the checks that refuse. Nothing here changes the Host. */
 export async function runChecks(ctx: Context): Promise<CheckResult[]> {
   const results: CheckResult[] = [];
-  for (const check of hostChecks) if (check.refuses) results.push(...(await check.run(ctx)));
+  const facts = hostFacts(ctx);
+  for (const check of hostChecks) {
+    if (check.refuses) results.push(...(await check.run(ctx, facts)));
+  }
   return results;
 }

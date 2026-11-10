@@ -919,7 +919,7 @@ It needs no `--yes` on a terminal; scripts pass `--yes`. Without `--to` it takes
   ```
 
 - A new signing key can ship in the tarball as `share/dcabsm-signing-key.gpg`. It was vouched for by the old key, so the new version keeps it and later updates check against it. A tarball without one inherits the installed key.
-- Each version knows the layout version it expects (`self version` shows it). When the new version expects a higher layout than the Host stores, the update migrates forward, after copying `/etc/dcabsm` aside: "Copied /etc/dcabsm aside, migrated layout 3 → 4". The migration runs with the new version's own code, under the lock, before the symlink moves. If it fails, `/etc/dcabsm` is put back, the new version is removed and the symlink stays on the old one:
+- Each version knows the layout version it expects (`self version` shows it). When the new version expects a higher layout than the Host stores, the update migrates forward, after copying `/etc/dcabsm` aside: "Copied /etc/dcabsm aside, migrated layout 3 → 4". The migration runs with the new version's own code, under the lock, before the symlink moves. If it fails, or any later step fails (the symlink switch, the refresh), `/etc/dcabsm` is put back, the new version is removed and the symlink stays on the old one:
 
   ```
   error: Migrating layout 3 → 4 failed: <reason>
@@ -934,6 +934,8 @@ It needs no `--yes` on a terminal; scripts pass `--yes`. Without `--to` it takes
     Moving to a new layout is only done to the latest version: sudo dcabsm self update
   ```
 
+- Without `--to`, a latest version equal to the running one reports `DCABSM <ver> is already installed.` (exit 0). A latest version older than the running one is refused (exit 2) as "ahead of the latest", with the `--to` command that would go down. Going down needs an explicit `--to`.
+- `--to <running version>` with a lower stored layout migrates in place: it copies `/etc/dcabsm` aside, runs the migration and the refresh, and puts the copy back if either fails. Nothing is downloaded.
 - After the switch the new version rewrites the owned files and every Instance's `config.json` and `vhost.conf` (nginx -t first; the old files go back if it fails). An Instance whose `config.json` changed and that is running is listed as "Restart needed". An owned file edited by hand is kept, with a warning to review it with `host doctor --fix`.
 - It keeps the new and the previous version in `/opt/dcabsm/` and removes the rest.
 - Two hidden commands, `self migrate` and `self refresh`, are the steps the new version runs for the update. They refuse to run outside it.
