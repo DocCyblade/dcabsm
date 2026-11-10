@@ -166,10 +166,10 @@ expect_ok dcabsm backup list alpha
 expect_in "manual"
 
 step "Instance settings reach the config and the vhost"
-expect_ok dcabsm instance set alpha upload-limit-mb 40 --yes
+expect_ok dcabsm instance set alpha upload-limit-mb 60 --yes
 expect_ok dcabsm instance settings alpha
-expect_in "40"
-grep -rqs "client_max_body_size 41m" /etc/nginx /etc/dcabsm /srv/dcabsm ||
+expect_in "60"
+grep -rqs "client_max_body_size 61m" /etc/nginx /etc/dcabsm /srv/dcabsm ||
   fail "the vhost does not carry the new upload limit"
 wait_for 60 up alpha.test
 

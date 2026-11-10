@@ -45,6 +45,8 @@ DCABSM is TypeScript on Node 24, bundled by esbuild into one JS file. It has no 
 - `run.sh`: builds the image, makes the throwaway CA and signing key, fills in `install.sh`'s placeholders, stages the CI-built tarball and a copy of it that calls itself the next patch version (for `self update`), starts the mirror, boots the container and runs the journey.
 - `journey.sh`: runs inside the container with `DCABSM_ALLOW_CONTAINER=1`. It installs with `install.sh`, checks that setup refuses without the override, sets up the Host, expects `host doctor` to show the Unsupported Host mark, creates two Instances (one self-signed, one with `--cert`) on two Releases, checks HTTPS through the real Nginx, and exercises `release install` and `prune`, `stop` and `start`, `backup create`, `instance set`, the `reset-password` refusal and `self update`.
 
+`scripts/remote-test.sh [<os>...] [--live] [--no-reset]` runs the same journey on a private Proxmox test VM instead of in CI: it rolls the VM back to its clean snapshot, copies the working tree over, builds the tarballs there and runs `run.sh` for each OS (all three by default). It reads the VM, its SSH alias and its API token from `~/.config/test-vms.env`, outside the repo; `TVM=<NAME>` picks another VM.
+
 `--live` skips the mirror and the signing key. The tarball is unpacked where `install.sh` would put it, and setup installs the newest Release and Node from the live sources. Container runs are not evidence of support (spec 13.2).
 
 ## Before the first release

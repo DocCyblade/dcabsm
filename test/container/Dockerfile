@@ -8,8 +8,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       systemd systemd-sysv dbus ca-certificates curl gpgv gnupg openssl xz-utils tar sudo \
-      iproute2 procps util-linux less \
- && rm -rf /var/lib/apt/lists/*
+      iproute2 procps util-linux less
+# The package lists stay, as on a real Host: `host setup` runs `apt-get install` without an update.
 
 STOPSIGNAL SIGRTMIN+3
 CMD ["/sbin/init"]
