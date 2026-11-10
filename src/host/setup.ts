@@ -33,7 +33,11 @@ import {
   writeVerified,
 } from "./owned.ts";
 
-const PACKAGES = ["nginx", "openssl"];
+// xz-utils unpacks Node's .tar.xz; a TurnKey Core appliance has no xz.
+const PACKAGES = ["nginx", "openssl", "xz-utils"];
+
+const sayList = (names: string[]) =>
+  names.length < 2 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 
 interface Dir {
   path: string;
@@ -145,8 +149,7 @@ export async function hostSetup({ ctx, args }: Invocation): Promise<void> {
   ctx.io.out("");
   ctx.io.out("Plan");
   if (turnkey) step(ctx, "info", turnkey.line);
-  if (missingPackages.length > 0)
-    step(ctx, "info", `Install ${missingPackages.join(" and ")} with apt`);
+  if (missingPackages.length > 0) step(ctx, "info", `Install ${sayList(missingPackages)} with apt`);
   if (missingDirs.length > 0) step(ctx, "info", "Create /etc/dcabsm and /srv/dcabsm");
   step(ctx, "info", `Backups in ${backupDir}`);
   if (ownedWork.length > 0)
@@ -178,7 +181,7 @@ export async function hostSetup({ ctx, args }: Invocation): Promise<void> {
     ]);
     if (res.code !== 0) {
       throw new CliError(
-        `apt could not install ${missingPackages.join(" and ")}: ${firstLine(res.stderr, `apt-get exited ${res.code}`)}`,
+        `apt could not install ${sayList(missingPackages)}: ${firstLine(res.stderr, `apt-get exited ${res.code}`)}`,
         "Fix the problem, then run again: sudo dcabsm host setup",
       );
     }
