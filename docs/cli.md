@@ -87,6 +87,13 @@ error: This Host was last changed by a newer DCABSM (layout 4). This is DCABSM 1
   Install DCABSM 2.0.0 or newer: sudo dcabsm self update
 ```
 
+The version named is the one that last migrated the layout (`layoutSince` in `dcabsm.json`). If the Host is on a lower layout than this version expects, every command refuses until `sudo dcabsm self update` has migrated it:
+
+```
+error: This Host is on layout 3, and DCABSM 1.2.0 expects layout 4. Its stored state needs migrating first.
+  Run: sudo dcabsm self update
+```
+
 On an Unsupported Host (spec 10.4), every command except `host doctor` starts with a banner, and `host doctor` shows the mark as a failure:
 
 ```
@@ -205,7 +212,7 @@ Does it match? [y/N] y
 Next: sudo dcabsm host setup
 ```
 
-`--yes` skips the fingerprint question. It never runs setup and never touches apt. If DCABSM is already installed, it points to `sudo dcabsm self update` and stops. See spec 11.3.
+`--yes` skips the fingerprint question. It keeps the key as `/opt/dcabsm/<ver>/share/dcabsm-signing-key.gpg`: the installed key that `self update` trusts. It never runs setup and never touches apt. If DCABSM is already installed, it points to `sudo dcabsm self update` and stops. See spec 11.3.
 
 ## host
 
@@ -893,17 +900,33 @@ Self-update DCABSM 1.2.0 → 1.3.0
   · Never changes an Instance's Release or restarts an Instance.
 Continue? [y/N] y
   ✓ Downloaded dcabsm-1.3.0-linux-amd64.tar.gz
-  ✓ Signature good, checked with gpgv against the installed key XXXX…XXXX
+  ✓ Signature good, checked with gpgv against the installed key
   ✓ Extracted to /opt/dcabsm/1.3.0/
   ✓ /usr/local/bin/dcabsm → /opt/dcabsm/1.3.0/
   ✓ Owned files refreshed: dcabsm@.service, dcabsm-nightly.timer, 2 vhost.conf (nginx -t passed, reloaded)
-  ✓ Removed /opt/dcabsm/1.1.0/ (keeps current and previous)
 
   ! Restart needed: family (its generated config.json changed). Run: sudo dcabsm instance restart family
+  ✓ Removed /opt/dcabsm/1.1.0/ (keeps current and previous)
 ```
 
-- It checks the signature only against the key already installed.
-- A new layout version is migrated forward, after copying `/etc/dcabsm` aside: "Copied /etc/dcabsm aside, migrated layout 3 → 4".
+It needs no `--yes` on a terminal; scripts pass `--yes`. Without `--to` it takes the latest stable version from GitHub.
+
+- It checks `SHA256SUMS.sig` with `gpgv` only against the key already installed (`/opt/dcabsm/<current>/share/dcabsm-signing-key.gpg`), never one from the download, then checks the tarball against `SHA256SUMS`. A bad signature or checksum stops with nothing changed:
+
+  ```
+  error: The signature on SHA256SUMS does not verify against the installed key.
+    Nothing was changed. DCABSM only trusts the key it already has. gpgv: ...
+  ```
+
+- A new signing key can ship in the tarball as `share/dcabsm-signing-key.gpg`. It was vouched for by the old key, so the new version keeps it and later updates check against it. A tarball without one inherits the installed key.
+- Each version knows the layout version it expects (`self version` shows it). When the new version expects a higher layout than the Host stores, the update migrates forward, after copying `/etc/dcabsm` aside: "Copied /etc/dcabsm aside, migrated layout 3 → 4". The migration runs with the new version's own code, under the lock, before the symlink moves. If it fails, `/etc/dcabsm` is put back, the new version is removed and the symlink stays on the old one:
+
+  ```
+  error: Migrating layout 3 → 4 failed: <reason>
+    /etc/dcabsm was put back as it was. The symlink stays on 1.2.0.
+  ```
+
+- Until a migration has run, every other command refuses (see "Rules every command follows"). Only `self update`, `self version` and `--version` run. Migrations only go forward: a version whose layout is lower than the Host's is refused.
 - `--to <ver>` moves to any stable version, older or newer, only on the same layout:
 
   ```
@@ -911,7 +934,9 @@ Continue? [y/N] y
     Moving to a new layout is only done to the latest version: sudo dcabsm self update
   ```
 
-- An owned file edited by hand is kept, with a warning to review it with `host doctor --fix`.
+- After the switch the new version rewrites the owned files and every Instance's `config.json` and `vhost.conf` (nginx -t first; the old files go back if it fails). An Instance whose `config.json` changed and that is running is listed as "Restart needed". An owned file edited by hand is kept, with a warning to review it with `host doctor --fix`.
+- It keeps the new and the previous version in `/opt/dcabsm/` and removes the rest.
+- Two hidden commands, `self migrate` and `self refresh`, are the steps the new version runs for the update. They refuse to run outside it.
 
 ### self version
 

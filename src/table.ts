@@ -11,6 +11,9 @@ import { instanceList, instanceShow } from "./instance/list.ts";
 import { instanceResetPassword } from "./instance/reset-password.ts";
 import { instanceSet, instanceSettings, instanceUnset } from "./instance/settings.ts";
 import { releaseList } from "./release/list.ts";
+import { selfMigrate } from "./self/migrations.ts";
+import { selfRefresh } from "./self/refresh.ts";
+import { selfUpdate } from "./self/update.ts";
 import { releasePrune } from "./release/prune.ts";
 import { versionLine } from "./version.ts";
 
@@ -277,6 +280,23 @@ export const table: Noun[] = [
         summary: "Update DCABSM itself",
         beforeSetup: true,
         changes: true,
+        run: selfUpdate,
+      },
+      {
+        name: "migrate",
+        usage: "migrate",
+        summary: "A step of self update: migrate the stored layout",
+        hidden: true,
+        beforeSetup: true,
+        run: selfMigrate,
+      },
+      {
+        name: "refresh",
+        usage: "refresh",
+        summary: "A step of self update: refresh the owned files",
+        hidden: true,
+        beforeSetup: true,
+        run: selfRefresh,
       },
       {
         name: "version",

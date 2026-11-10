@@ -115,6 +115,7 @@ The same steps, for amd64 (use `arm64` on an arm64 Host). Replace `<version>` wi
    ```
    sudo mkdir -p /opt/dcabsm/<version>
    sudo tar -xzf dcabsm-<version>-linux-amd64.tar.gz -C /opt/dcabsm/<version> --strip-components=1
+   sudo install -D -m 644 dcabsm.gpg /opt/dcabsm/<version>/share/dcabsm-signing-key.gpg
    sudo ln -sfn /opt/dcabsm/<version>/bin/dcabsm /usr/local/bin/dcabsm
    sudo install -m 644 /opt/dcabsm/<version>/share/bash-completion/completions/dcabsm \
      /usr/share/bash-completion/completions/dcabsm
