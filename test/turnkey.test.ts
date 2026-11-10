@@ -42,10 +42,11 @@ const SITE = "/etc/nginx/sites-enabled/nodejs";
 const JOB = "/etc/cron.daily/confconsole-dehydrated";
 
 const restorePieces = async (host: FakeHost) => {
-  await put("/etc/nginx/sites-available/nodejs", "server {}\n");
+  await put("/etc/nginx/sites-available/nodejs", "server { listen 443 ssl default_server; }\n");
   await mkdir(h.ctx.paths.under("/etc/nginx/sites-enabled"), { recursive: true });
   await rm(h.ctx.paths.under(SITE), { force: true });
-  await symlink("/etc/nginx/sites-available/nodejs", h.ctx.paths.under(SITE));
+  // Relative, so it resolves under the temporary root as TurnKey's absolute link does on a Host.
+  await symlink("../sites-available/nodejs", h.ctx.paths.under(SITE));
   host.enabled.add("pm2-node");
   host.active.add("pm2-node");
   await put(JOB, "#!/bin/sh\n", 0o755);
@@ -107,11 +108,17 @@ describe("host setup on TurnKey Node.js", () => {
     );
     expect(await hasEntry(SITE)).toBe(false);
     expect(await readFile(h.ctx.paths.under("/etc/nginx/sites-available/nodejs"), "utf8")).toBe(
-      "server {}\n",
+      "server { listen 443 ssl default_server; }\n",
     );
     expect(host.enabled.has("pm2-node")).toBe(false);
     expect(host.active.has("pm2-node")).toBe(false);
     expect(await modeOf(JOB)).toBe(0o644);
+  });
+
+  it("writes DCABSM's catch-all once TurnKey's own default server is disabled", async () => {
+    const { code } = await turnkey("nodejs", ["host", "setup", "--yes"]);
+    expect(code).toBe(0);
+    expect(await hasEntry("/etc/nginx/conf.d/dcabsm-default.conf")).toBe(true);
   });
 
   it("changes nothing when the plan is declined", async () => {
