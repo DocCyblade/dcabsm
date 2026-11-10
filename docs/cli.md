@@ -467,8 +467,10 @@ Password changed successfully.
 It refuses:
 
 - with no terminal: "Password reset needs a terminal: you type the new password straight into Actual."
-- on an Instance that has never started, which has no password yet, with a pointer to its hostname
-- on an OpenID-only Instance: "Reset passwords with your OpenID provider."
+- on an Instance that has never started (no `server-files/account.sqlite` yet), which has no password yet, with a pointer to its hostname
+- on an OpenID-only Instance, where Actual's `auth` table has an `openid` row and no `password` row: "Reset passwords with your OpenID provider."
+
+DCABSM runs `runuser -u dcabsm-<name> -- env ... actual-server --config <path> --reset-password` from the Instance's Release with the terminal attached. On a started Instance that has no password yet, the same tool sets the first one. When it succeeds, DCABSM adds one line: anyone signed in has to sign in again.
 
 ### instance settings, set and unset
 
@@ -853,12 +855,14 @@ Installs one stable Release with its Node runtime and checks its native modules 
 
 ```
   · Release 26.10.0
+  · Node runtime 22.20.0
 Remove these unused Releases and any Node runtime no Release uses? [y/N] y
   ✓ Removed Release 26.10.0
+  ✓ Removed Node runtime 22.20.0
   · A rollback to a removed Release reinstalls it from npm, without its old lockfile.
 ```
 
-It keeps a Release that an unfinished Release change still names. With nothing to remove: "No unused Releases."
+It keeps a Release that an unfinished Release change still names, as the from or the to Release. A Node runtime goes when no remaining Release uses it, including an older patch of a major that a kept Release uses. DCABSM's own Node is never touched. Without a terminal it needs `--yes`. With nothing to remove: "No unused Releases."
 
 ### release update-node
 
