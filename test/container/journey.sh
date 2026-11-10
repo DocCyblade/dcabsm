@@ -228,6 +228,27 @@ expect_ok dcabsm instance list
 expect_in "alpha"
 expect_in "beta"
 
+step "A failed upgrade rolls back by itself, and the start gate is cleaned up"
+echo "127.0.0.1 gamma.test" >> /etc/hosts
+expect_ok dcabsm instance create gamma --hostname gamma.test --self-signed --release 26.10.0
+wait_for 30 up gamma.test
+# Break the newer Release's server so the upgraded Instance can never pass Verification.
+entry="$(readlink -f /srv/dcabsm/instances/beta/release)/node_modules/.bin/actual-server"
+real="$(readlink -f "$entry")"
+cp -a "$real" /root/actual-server.orig
+printf '#!/bin/sh\nexit 1\n' > "$real"
+run dcabsm instance upgrade gamma --to 26.11.0 --yes
+cat /root/actual-server.orig > "$real" # put the Release right again for beta
+[ "$status" -ne 0 ] || fail "an upgrade onto a broken Release exited 0"
+expect_in "Rolling back automatically"
+wait_for 60 up gamma.test
+run info gamma.test
+expect_in "26.10.0"
+[ ! -e /srv/dcabsm/instances/gamma/.changing-release ] || fail "the change marker was left behind"
+expect_ok dcabsm backup list gamma
+expect_in "pre-upgrade"
+expect_ok dcabsm instance remove gamma --confirm gamma
+
 step "Remove beta; its Backups stay under a .removed- folder"
 expect_ok dcabsm instance remove beta --confirm beta
 wait_for 30 down beta.test
