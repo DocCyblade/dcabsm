@@ -542,9 +542,9 @@ describe("instance list and show", () => {
     h.out.length = 0;
     expect(await run(["instance", "list"], h.ctx)).toBe(0);
     expect(h.out).toEqual([
-      "INSTANCE  STATE    RELEASE  HOSTNAME          PORT",
-      "shop      active   26.11.1  shop.example.org  15127",
-      "two       stopped  26.11.1  two.example.org   15128",
+      "INSTANCE  STATE    RELEASE  HOSTNAME          PORT   LAST SCHEDULED",
+      "shop      active   26.11.1  shop.example.org  15127  none",
+      "two       stopped  26.11.1  two.example.org   15128  none",
       "",
       expect.stringMatching(/^DCABSM \S+$/),
       "→ No update check yet: sudo dcabsm host check-updates",

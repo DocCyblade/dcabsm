@@ -3,6 +3,8 @@ import { hostDoctor } from "./host/doctor.ts";
 import { hostSetup } from "./host/setup.ts";
 import { hostCheckUpdates } from "./host/updates.ts";
 import { releaseInstall } from "./release/install.ts";
+import { backupCreate } from "./backup/create.ts";
+import { backupList } from "./backup/list.ts";
 import { instanceCreate } from "./instance/create.ts";
 import { instanceLogs, instanceRestart, instanceStart, instanceStop } from "./instance/controls.ts";
 import { instanceList, instanceShow } from "./instance/list.ts";
@@ -195,8 +197,9 @@ export const table: Noun[] = [
         usage: "create <names>|--all",
         summary: "Take a manual Backup",
         changes: true,
+        run: backupCreate,
       },
-      { name: "list", usage: "list [<names>]", summary: "List archives" },
+      { name: "list", usage: "list [<names>]", summary: "List archives", run: backupList },
       {
         name: "prune",
         usage: "prune [<names>|--all] [--dry-run]",
