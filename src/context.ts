@@ -9,6 +9,8 @@ export interface RunResult {
 /** Seam one: every external program (`systemctl`, `nginx`, `logger`, ...). */
 export interface CommandRunner {
   run(command: string, args: string[]): Promise<RunResult>;
+  /** Runs with the terminal attached (`instance logs -f`); resolves to the exit code. Tests leave it out. */
+  inherit?(command: string, args: string[]): Promise<number>;
 }
 
 export interface FetchResult {

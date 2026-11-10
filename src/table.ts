@@ -4,6 +4,7 @@ import { hostSetup } from "./host/setup.ts";
 import { hostCheckUpdates } from "./host/updates.ts";
 import { releaseInstall } from "./release/install.ts";
 import { instanceCreate } from "./instance/create.ts";
+import { instanceLogs, instanceRestart, instanceStart, instanceStop } from "./instance/controls.ts";
 import { instanceList, instanceShow } from "./instance/list.ts";
 import { releaseList } from "./release/list.ts";
 import { versionLine } from "./version.ts";
@@ -112,23 +113,27 @@ export const table: Noun[] = [
         usage: "start <names>|--all",
         summary: "Start Instances",
         changes: true,
+        run: instanceStart,
       },
       {
         name: "stop",
         usage: "stop <names>|--all",
         summary: "Stop Instances",
         changes: true,
+        run: instanceStop,
       },
       {
         name: "restart",
         usage: "restart <names>|--all",
         summary: "Restart Instances",
         changes: true,
+        run: instanceRestart,
       },
       {
         name: "logs",
         usage: "logs <name> [-f] [--since <time>]",
         summary: "Read an Instance's journal",
+        run: instanceLogs,
       },
       {
         name: "set-hostname",
