@@ -5,6 +5,7 @@ import type { Context } from "../context.ts";
 import { refusal } from "../errors.ts";
 import { exists } from "../fsutil.ts";
 import { instanceListFooter } from "../host/updates.ts";
+import { listArchives } from "../backup/archive.ts";
 import { releaseNodeMajor } from "../release/install.ts";
 import { linkedPatch } from "../release/node.ts";
 import type { Invocation } from "../table.ts";
@@ -41,6 +42,17 @@ export interface InstanceRow {
   state: InstanceState;
   release: string;
   record: InstanceRecord;
+  /** `off`, `none`, or the newest scheduled Backup as `MM-DD HH:MM UTC`. */
+  lastScheduled: string;
+}
+
+/** The newest scheduled Backup, as the LAST SCHEDULED column shows it (docs/cli.md). */
+async function lastScheduledOf(ctx: Context, name: string, record: InstanceRecord) {
+  if (!record.scheduledBackups) return "off";
+  const newest = (await listArchives(ctx, name)).filter((a) => a.kind === "scheduled").at(-1);
+  if (!newest) return "none";
+  const s = newest.stamp;
+  return `${s.slice(4, 6)}-${s.slice(6, 8)} ${s.slice(9, 11)}:${s.slice(11, 13)} UTC`;
 }
 
 /** `CHANGING` while a Release change is unfinished, else the unit's state (`stopped` when inactive). */
@@ -61,14 +73,27 @@ async function releaseOf(ctx: Context, name: string): Promise<string> {
 }
 
 async function rowFor(ctx: Context, name: string, record: InstanceRecord): Promise<InstanceRow> {
-  return { name, state: await stateOf(ctx, name), release: await releaseOf(ctx, name), record };
+  return {
+    name,
+    state: await stateOf(ctx, name),
+    release: await releaseOf(ctx, name),
+    record,
+    lastScheduled: await lastScheduledOf(ctx, name, record),
+  };
 }
 
 /** The overview table, one line per Instance. Later tickets add columns and a footer. */
 export function renderInstanceTable(rows: InstanceRow[]): string[] {
   const table = [
-    ["INSTANCE", "STATE", "RELEASE", "HOSTNAME", "PORT"],
-    ...rows.map((r) => [r.name, r.state, r.release, r.record.hostname, String(r.record.port)]),
+    ["INSTANCE", "STATE", "RELEASE", "HOSTNAME", "PORT", "LAST SCHEDULED"],
+    ...rows.map((r) => [
+      r.name,
+      r.state,
+      r.release,
+      r.record.hostname,
+      String(r.record.port),
+      r.lastScheduled,
+    ]),
   ];
   const widths = table[0]!.map((_, i) => Math.max(...table.map((r) => r[i]!.length)));
   return table.map((r) =>
