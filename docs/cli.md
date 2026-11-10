@@ -851,12 +851,14 @@ Installs one stable Release with its Node runtime and checks its native modules 
 
 ```
   · Release 26.10.0
+  · Node runtime 22.20.0
 Remove these unused Releases and any Node runtime no Release uses? [y/N] y
   ✓ Removed Release 26.10.0
+  ✓ Removed Node runtime 22.20.0
   · A rollback to a removed Release reinstalls it from npm, without its old lockfile.
 ```
 
-It keeps a Release that an unfinished Release change still names. With nothing to remove: "No unused Releases."
+It keeps a Release that an unfinished Release change still names, as the from or the to Release. A Node runtime goes when no remaining Release uses it, including an older patch of a major that a kept Release uses. DCABSM's own Node is never touched. Without a terminal it needs `--yes`. With nothing to remove: "No unused Releases."
 
 ### release update-node
 
