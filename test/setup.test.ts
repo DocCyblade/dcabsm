@@ -41,11 +41,11 @@ describe("host setup and the completion script", () => {
 });
 
 describe("host setup on a clean Debian 13 VM", () => {
-  it("installs nginx and openssl, then leaves the Host tree and dcabsm.json", async () => {
+  it("installs nginx, openssl and xz-utils, then leaves the Host tree and dcabsm.json", async () => {
     const host = fakeHost();
     expect(await setup(host)).toBe(0);
 
-    expect(host.installed).toEqual(new Set(["nginx", "openssl"]));
+    expect(host.installed).toEqual(new Set(["nginx", "openssl", "xz-utils"]));
     expect(h.calls.find((c) => c.command === "env" && c.args.includes("apt-get"))?.args).toEqual([
       "DEBIAN_FRONTEND=noninteractive",
       "apt-get",
@@ -53,6 +53,7 @@ describe("host setup on a clean Debian 13 VM", () => {
       "-y",
       "nginx",
       "openssl",
+      "xz-utils",
     ]);
 
     const p = h.ctx.paths;
@@ -76,7 +77,7 @@ describe("host setup on a clean Debian 13 VM", () => {
     expect(h.asked).toEqual(["Go ahead? [y/N] "]);
     expect(h.out).toContain("Setup checks (nothing changes yet)");
     expect(h.out).toContain("  ✓ Debian 13 (trixie), amd64");
-    expect(h.out).toContain("  · Install nginx and openssl with apt");
+    expect(h.out).toContain("  · Install nginx, openssl and xz-utils with apt");
     expect(h.out).toContain("  · Backups in /srv/dcabsm/backups");
   });
 
@@ -153,7 +154,7 @@ describe("host setup re-run", () => {
     });
     expect(await setup(host)).toBe(1);
     expect(h.err).toEqual([
-      "error: apt could not install nginx and openssl: E: Unable to locate package nginx",
+      "error: apt could not install nginx, openssl and xz-utils: E: Unable to locate package nginx",
       "  Fix the problem, then run again: sudo dcabsm host setup",
     ]);
     expect(await pathExists(h.ctx.paths.hostConfig)).toBe(false);

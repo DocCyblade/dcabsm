@@ -220,7 +220,7 @@ Next: sudo dcabsm host setup
 
 `host setup [--release <v>] [--backup-dir <path>] [--yes]`
 
-Prepares the Host: installs Nginx and `openssl`, creates `/etc/dcabsm` and `/srv/dcabsm`, writes the units and Nginx files, and installs the first Release with its Node runtime. It runs every check that can refuse before it changes anything, then shows the plan and asks once.
+Prepares the Host: installs Nginx, `openssl` and `xz-utils`, creates `/etc/dcabsm` and `/srv/dcabsm`, writes the units and Nginx files, and installs the first Release with its Node runtime. It runs every check that can refuse before it changes anything, then shows the plan and asks once.
 
 ```
 Setup checks (nothing changes yet)
@@ -230,13 +230,13 @@ Setup checks (nothing changes yet)
   ✓ Nothing else listening on 80 or 443
 
 Plan
-  · Install nginx and openssl with apt
+  · Install nginx, openssl and xz-utils with apt
   · Create /etc/dcabsm and /srv/dcabsm
   · Backups in /srv/dcabsm/backups
   · Write dcabsm@.service, dcabsm-nightly.timer (03:30), Nginx conf.d files
   · Install Actual 26.11.1 with its Node runtime
 Go ahead? [y/N] y
-  ✓ apt: nginx, openssl
+  ✓ apt: nginx, openssl, xz-utils
   ✓ Created /etc/dcabsm/dcabsm.json (layout 3) and /srv/dcabsm
   ✓ Units written; dcabsm-nightly.timer enabled
   ✓ Nginx: nginx -t passed, started, enabled
