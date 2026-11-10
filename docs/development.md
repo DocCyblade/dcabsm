@@ -32,7 +32,20 @@ DCABSM is TypeScript on Node 24, bundled by esbuild into one JS file. It has no 
 - `src/args.ts`, `src/fsutil.ts`, `src/output.ts`: flag parsing, file and directory helpers, and the step marks.
 - `src/paths.ts`: every path hangs off one root. `DCABSM_ROOT` moves it; the default is `/`. In the shipped completion script it is a test seam only: it lets the real-bash tests run under a temporary root.
 - `src/prompt.ts`, `src/lock.ts`, `src/log.ts`: the helpers every command shares.
+- `test/container/`: the container layer (spec 13.2, 13.3), CI only in practice; see below.
 - `test/helpers.ts`: a `Context` on a temporary root with a faked runner and fetcher. Tests assert on the files left behind.
+
+## Container layer
+
+`test/container/run.sh <debian-13|ubuntu-24.04|ubuntu-26.04> [--live]` runs the real `dcabsm` as root in a privileged systemd container (spec 13.2). It needs Linux, Docker, passwordless `sudo` (the mirror listens on port 443) and the tarballs from `npm run build && npm run package`. CI runs it for all three OSes on `ubuntu-24.04` and `ubuntu-24.04-arm` (job `containers` in `ci.yml`), and `live.yml` runs `--live` every Monday.
+
+- `Dockerfile`: one image per OS, systemd as PID 1 and the few tools a fresh Host has. DCABSM and Nginx are not in it.
+- `pins.json`, `pins.ts`: the pinned Releases. `pins.ts` fetches nodejs.org's signed files for the Node in `.node-version`, each Release's registry document and an npm cache holding every pinned Release, into `.cache/container-pins/<arch>`. CI caches that directory, keyed on `pins.json` and `.node-version`.
+- `mirror.ts`: a static HTTPS server that stands in for `registry.npmjs.org`, `nodejs.org`, `raw.githubusercontent.com`, `api.github.com` and `github.com`. The container's `--add-host` points those names at it, and a throwaway CA makes `dcabsm` and `curl` trust it. npm runs offline against the cache.
+- `run.sh`: builds the image, makes the throwaway CA and signing key, fills in `install.sh`'s placeholders, stages the CI-built tarball and a copy of it that calls itself the next patch version (for `self update`), starts the mirror, boots the container and runs the journey.
+- `journey.sh`: runs inside the container with `DCABSM_ALLOW_CONTAINER=1`. It installs with `install.sh`, checks that setup refuses without the override, sets up the Host, expects `host doctor` to show the Unsupported Host mark, creates two Instances (one self-signed, one with `--cert`) on two Releases, checks HTTPS through the real Nginx, and exercises `release install` and `prune`, `stop` and `start`, `backup create`, `instance set`, the `reset-password` refusal and `self update`.
+
+`--live` skips the mirror and the signing key. The tarball is unpacked where `install.sh` would put it, and setup installs the newest Release and Node from the live sources. Container runs are not evidence of support (spec 13.2).
 
 ## Before the first release
 
