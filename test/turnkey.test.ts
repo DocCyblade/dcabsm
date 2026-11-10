@@ -54,7 +54,7 @@ const restorePieces = async (host: FakeHost) => {
 /** A TurnKey appliance after (or before) its first boot, as the faked runner and the temporary root show it. */
 async function appliance(kind: Appliance, opts: Options = {}): Promise<FakeHost> {
   const host = fakeHost();
-  for (const pkg of opts.packages ?? [`turnkey-${kind}`]) host.installed.add(pkg);
+  for (const pkg of opts.packages ?? [`turnkey-${kind}-19.0`]) host.installed.add(pkg);
   const firstBoot = opts.firstBoot ?? "done";
   if (firstBoot === "fence") host.active.add("turnkey-init-fence");
   h = await harness({
@@ -189,7 +189,7 @@ describe("host setup refusals on TurnKey", () => {
 
   it("refuses when the version file and the package disagree", async () => {
     const { code, host } = await turnkey("nodejs", ["host", "setup", "--yes"], {
-      packages: ["turnkey-core"],
+      packages: ["turnkey-core-19.0"],
     });
     expect(code).toBe(2);
     expect(h.err.join("\n")).toContain("Only TurnKey Core and Node.js are supported");
@@ -254,7 +254,7 @@ describe("host doctor on TurnKey", () => {
 
   it("notes webmin-nginx", async () => {
     await appliance("core", {
-      packages: ["turnkey-core", "webmin-nginx"],
+      packages: ["turnkey-core-19.0", "webmin-nginx"],
     });
     expect(await run(["host", "setup", "--yes"], h.ctx)).toBe(0);
     h.out.length = 0;
