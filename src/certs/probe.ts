@@ -6,6 +6,7 @@ import { errorMessage, refusal } from "../errors.ts";
 import {
   instanceDir,
   instanceNames,
+  readRecord,
   requireInstance,
   type InstanceRecord,
 } from "../instance/record.ts";
@@ -45,6 +46,17 @@ export async function certTargets(
         : `Usage: dcabsm ${usage}`,
     );
   }
+  return targetsOf(ctx, list);
+}
+
+/** Every Instance with a record, with no complaint when there are none. A folder without one is a leftover for doctor to say. */
+export async function allCertTargets(ctx: Context): Promise<CertTarget[]> {
+  const named: string[] = [];
+  for (const name of await instanceNames(ctx)) if (await readRecord(ctx, name)) named.push(name);
+  return targetsOf(ctx, named);
+}
+
+async function targetsOf(ctx: Context, list: string[]): Promise<CertTarget[]> {
   const targets: CertTarget[] = [];
   for (const name of list) {
     const nginx = join(instanceDir(ctx, name), "nginx");

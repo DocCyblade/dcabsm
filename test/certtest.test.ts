@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { instanceList } from "../src/instance/list.ts";
+import { certChecks } from "../src/certs/doctor.ts";
 import { certTest } from "../src/certs/test.ts";
+import { hostFacts } from "../src/host/checks.ts";
 import { makeCert } from "./certs.ts";
 import { certHost, type CertHost } from "./certhost.ts";
 
@@ -111,5 +113,52 @@ describe("instance list", () => {
     await setup({ startAt: new Date(Date.now() + 11 * 86_400_000) });
     await instanceList({ ctx: t!.h.ctx, args: [] });
     expect(t!.h.out[2]).toMatch(/expired self-signed/);
+  });
+});
+
+describe("host doctor's certificate check (spec 5.7)", () => {
+  const check = () => certChecks[0]!.run(t!.h.ctx, hostFacts(t!.h.ctx));
+
+  it("runs the cert test for every Instance, rating each finding", async () => {
+    await setup();
+    t!.net.dns = { "a.example.org": ["127.0.0.1"] };
+    const results = await check();
+    expect(results).toContainEqual({
+      kind: "pass",
+      label: "a: Served certificate matches a.example.org and the file on disk",
+    });
+    expect(results).toContainEqual({
+      kind: "problem",
+      severity: "note",
+      message: "a: Not trusted by system CAs (self-signed)",
+    });
+    expect(results).toContainEqual({
+      kind: "problem",
+      severity: "warn",
+      message: "b: 9 days left",
+    });
+    expect(results).toContainEqual({
+      kind: "problem",
+      severity: "warn",
+      message: "b: Hostname does not resolve",
+    });
+  });
+
+  it("fails an Instance whose served certificate differs from the file on disk", async () => {
+    await setup();
+    // A renewed file is on disk and Nginx has not reloaded.
+    t!.add("a", "a.example.org", makeCert("a.example.org"));
+    const results = await check();
+    expect(results).toContainEqual({
+      kind: "problem",
+      severity: "fail",
+      message:
+        "a: Served certificate differs from the file on disk. Reload Nginx: sudo systemctl reload nginx",
+    });
+  });
+
+  it("has nothing to say on a Host with no Instances", async () => {
+    t = await certHost();
+    expect(await check()).toEqual([]);
   });
 });

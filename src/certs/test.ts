@@ -8,6 +8,12 @@ import { step } from "../output.ts";
 import type { Invocation } from "../table.ts";
 import { certTargets, type CertTarget } from "./probe.ts";
 
+/** One line of a test: the mark `step` prints it with, and whether it counts as a failure. */
+export interface Finding {
+  mark: "done" | "info" | "warn" | "failed";
+  text: string;
+}
+
 const USAGE = "cert test [<names>|--all]";
 const WARN_DAYS = 30;
 
@@ -19,80 +25,88 @@ function isLocal(address: string): boolean {
   );
 }
 
-async function resolution(ctx: Context, hostname: string): Promise<void> {
+async function resolution(ctx: Context, hostname: string): Promise<Finding> {
   try {
     const addresses = await ctx.fetcher.resolve(hostname);
-    if (addresses.some(isLocal)) step(ctx, "done", "Hostname resolves to this Host");
-    else step(ctx, "info", `Hostname resolves to ${addresses[0]}, not an address on this Host`);
+    if (addresses.some(isLocal)) return { mark: "done", text: "Hostname resolves to this Host" };
+    return {
+      mark: "info",
+      text: `Hostname resolves to ${addresses[0]}, not an address on this Host`,
+    };
   } catch {
-    step(ctx, "warn", "Hostname does not resolve");
+    return { mark: "warn", text: "Hostname does not resolve" };
   }
 }
 
-/** Tests one Instance; returns whether it failed (spec 5.7). */
-async function testOne(ctx: Context, target: CertTarget): Promise<boolean> {
-  const { name, record } = target;
-  const hostname = record.hostname;
-  ctx.io.out(`${name}  ${hostname}`);
+/** Tests one Instance and says what it found (spec 5.7). Shared by `cert test` and `host doctor`. */
+export async function testInstance(ctx: Context, target: CertTarget): Promise<Finding[]> {
+  const hostname = target.record.hostname;
+  const found: Finding[] = [];
 
   let disk: ChainFacts;
   try {
     disk = inspectChain(ctx, await readFile(target.certPath, "utf8"), hostname);
   } catch (err) {
-    step(ctx, "failed", `Certificate file: ${errorMessage(err)}`);
-    return true;
+    return [{ mark: "failed", text: `Certificate file: ${errorMessage(err)}` }];
   }
 
-  let failed = false;
   let served: ChainFacts | undefined;
   try {
     served = inspectChain(ctx, await ctx.fetcher.servedChain("127.0.0.1", 443, hostname), hostname);
   } catch (err) {
-    step(ctx, "failed", `Could not connect to 127.0.0.1:443 as ${hostname}: ${errorMessage(err)}`);
-    failed = true;
+    found.push({
+      mark: "failed",
+      text: `Could not connect to 127.0.0.1:443 as ${hostname}: ${errorMessage(err)}`,
+    });
   }
 
   if (served) {
     if (!served.covers) {
-      step(ctx, "failed", `Served certificate does not cover ${hostname}`);
-      failed = true;
+      found.push({
+        mark: "failed",
+        text: `Served certificate does not cover ${hostname}`,
+      });
     } else if (served.fingerprint !== disk.fingerprint) {
-      step(
-        ctx,
-        "failed",
-        "Served certificate differs from the file on disk. Reload Nginx: sudo systemctl reload nginx",
-      );
-      failed = true;
+      found.push({
+        mark: "failed",
+        text: "Served certificate differs from the file on disk. Reload Nginx: sudo systemctl reload nginx",
+      });
     } else {
-      step(ctx, "done", `Served certificate matches ${hostname} and the file on disk`);
+      found.push({
+        mark: "done",
+        text: `Served certificate matches ${hostname} and the file on disk`,
+      });
     }
   }
 
   const facts = served ?? disk;
-  if (facts.daysLeft < 0) {
-    step(ctx, "failed", `Expired ${-facts.daysLeft} days ago`);
-    failed = true;
-  } else if (facts.daysLeft < WARN_DAYS) {
-    step(ctx, "warn", `${facts.daysLeft} days left`);
-  } else {
-    step(ctx, "done", `${facts.daysLeft} days left`);
-  }
+  if (facts.daysLeft < 0)
+    found.push({ mark: "failed", text: `Expired ${-facts.daysLeft} days ago` });
+  else if (facts.daysLeft < WARN_DAYS)
+    found.push({ mark: "warn", text: `${facts.daysLeft} days left` });
+  else found.push({ mark: "done", text: `${facts.daysLeft} days left` });
   if (!facts.trusted) {
-    step(
-      ctx,
-      "info",
-      `Not trusted by system CAs (${facts.selfSigned ? "self-signed" : "private or unknown CA"})`,
-    );
+    found.push({
+      mark: "info",
+      text: `Not trusted by system CAs (${facts.selfSigned ? "self-signed" : "private or unknown CA"})`,
+    });
   }
-  await resolution(ctx, hostname);
-  return failed;
+  found.push(await resolution(ctx, hostname));
+  return found;
 }
 
 /** `cert test [<names>|--all]` */
 export async function certTest({ ctx, args }: Invocation): Promise<void> {
-  const { values, positionals } = parseCommand(args, { all: { type: "boolean" } });
+  const { values, positionals } = parseCommand(args, {
+    all: { type: "boolean" },
+  });
   const targets = await certTargets(ctx, USAGE, positionals, values.all, true);
   let failed = 0;
-  for (const target of targets) if (await testOne(ctx, target)) failed++;
+  for (const target of targets) {
+    ctx.io.out(`${target.name}  ${target.record.hostname}`);
+    const found = await testInstance(ctx, target);
+    for (const f of found) step(ctx, f.mark, f.text);
+    if (found.some((f) => f.mark === "failed")) failed++;
+  }
   if (failed > 0) throw new CliError(`${failed} of ${targets.length} Instances failed.`);
 }
