@@ -8,6 +8,7 @@ import { backupList } from "./backup/list.ts";
 import { instanceCreate } from "./instance/create.ts";
 import { instanceLogs, instanceRestart, instanceStart, instanceStop } from "./instance/controls.ts";
 import { instanceList, instanceShow } from "./instance/list.ts";
+import { instanceSet, instanceSettings, instanceUnset } from "./instance/settings.ts";
 import { releaseList } from "./release/list.ts";
 import { versionLine } from "./version.ts";
 
@@ -149,18 +150,25 @@ export const table: Noun[] = [
         summary: "Reset the server password in Actual's own tool",
         changes: true,
       },
-      { name: "settings", usage: "settings <name>", summary: "Show an Instance's settings" },
+      {
+        name: "settings",
+        usage: "settings <name>",
+        summary: "Show an Instance's settings",
+        run: instanceSettings,
+      },
       {
         name: "set",
         usage: "set <name> <key> <value> [--yes]",
         summary: "Change one Instance setting",
         changes: true,
+        run: instanceSet,
       },
       {
         name: "unset",
         usage: "unset <name> <key> [--yes]",
         summary: "Return one Instance setting to Actual's default",
         changes: true,
+        run: instanceUnset,
       },
       {
         name: "upgrade",

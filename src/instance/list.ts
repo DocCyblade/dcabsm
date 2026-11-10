@@ -9,6 +9,7 @@ import { listArchives } from "../backup/archive.ts";
 import { releaseNodeMajor } from "../release/install.ts";
 import { linkedPatch } from "../release/node.ts";
 import type { Invocation } from "../table.ts";
+import { settingsSummary } from "./setting-table.ts";
 import {
   accountOf,
   instanceDir,
@@ -59,7 +60,7 @@ async function lastScheduledOf(ctx: Context, name: string, record: InstanceRecor
 }
 
 /** `CHANGING` while a Release change is unfinished, else the unit's state (`stopped` when inactive). */
-async function stateOf(ctx: Context, name: string): Promise<InstanceState> {
+export async function stateOf(ctx: Context, name: string): Promise<InstanceState> {
   if (await exists(join(instanceDir(ctx, name), ".changing-release"))) return "CHANGING";
   const res = await ctx.runner.run("systemctl", ["is-active", `dcabsm@${name}`]);
   const state = res.stdout.trim();
@@ -142,6 +143,8 @@ export async function instanceShow({ ctx, args }: Invocation): Promise<void> {
     ["Account", accountOf(name)],
     ["Scheduled backups", record.scheduledBackups ? "on" : "off"],
   ];
+  const settings = settingsSummary(record.settings, row.release);
+  if (settings) fields.push(["Settings", settings]);
   ctx.io.out(`${name}  ${row.state}`);
   for (const [label, value] of fields) ctx.io.out(`  ${label.padEnd(17)}  ${value}`);
 }

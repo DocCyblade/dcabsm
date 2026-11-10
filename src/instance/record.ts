@@ -16,6 +16,8 @@ export interface InstanceRecord {
   port: number;
   hostname: string;
   scheduledBackups: boolean;
+  /** Only what the System Admin set; nothing for a setting at its default (spec 4.11). */
+  settings?: Record<string, number | boolean | string>;
 }
 
 export const accountOf = (name: string): string => `dcabsm-${name}`;
