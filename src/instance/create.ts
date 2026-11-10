@@ -5,7 +5,7 @@ import type { Context } from "../context.ts";
 import { Cancelled, CliError, errorMessage, firstLine, refusal } from "../errors.ts";
 import { ensureDir, exists, writeFileAtomic } from "../fsutil.ts";
 import { hostHasIpv6 } from "../host/owned.ts";
-import { nginxTestFailure, systemctl } from "../host/system.ts";
+import { nginxTestFailure, startUnit, systemctl } from "../host/system.ts";
 import { step } from "../output.ts";
 import {
   installedReleases,
@@ -352,7 +352,7 @@ async function startAndVerify(
   const unit = `dcabsm@${name}`;
   let seconds: number;
   try {
-    await systemctl(ctx, "start", unit);
+    await startUnit(ctx, "start", unit);
     seconds = await verifyInstance(ctx, name, record.port, release);
     await systemctl(ctx, "enable", unit);
   } catch (err) {

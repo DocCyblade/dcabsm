@@ -50,7 +50,9 @@ async function start(names: string[], opts: { failing?: string[] } = {}) {
 }
 
 const sysctl = () =>
-  h.calls.filter((c) => c.command === "systemctl" && !["is-active", "show"].includes(c.args[0]!));
+  h.calls.filter(
+    (c) => c.command === "systemctl" && !["is-active", "show", "reset-failed"].includes(c.args[0]!),
+  );
 
 describe("instance start, stop and restart", () => {
   it("start starts, verifies, then enables the unit", async () => {

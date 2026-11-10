@@ -64,7 +64,9 @@ async function start(names: string[], empty: string[] = []): Promise<void> {
 const backup = (...args: string[]) => run(["backup", ...args], h.ctx);
 const backups = (...parts: string[]) => join(h.ctx.paths.under("/srv/dcabsm/backups"), ...parts);
 const systemctls = () =>
-  h.calls.filter((c) => c.command === "systemctl" && c.args[0] !== "is-active").map((c) => c.args);
+  h.calls
+    .filter((c) => c.command === "systemctl" && !["is-active", "reset-failed"].includes(c.args[0]!))
+    .map((c) => c.args);
 const tarMembers = async (path: string) =>
   (JSON.parse(await readFile(path, "utf8")) as { members: string[] }).members;
 
@@ -102,7 +104,7 @@ describe("backup create", () => {
       .filter(
         (c) =>
           (c.command === "tar" && c.args[0] !== "-xzOf") ||
-          (c.command === "systemctl" && c.args[0] !== "is-active"),
+          (c.command === "systemctl" && !["is-active", "reset-failed"].includes(c.args[0]!)),
       )
       .map((c) => `${c.command} ${c.args[0]}`);
     expect(order).toEqual(["systemctl stop", "tar -czf", "tar -tzf", "systemctl start"]);

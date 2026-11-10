@@ -1,7 +1,7 @@
 import { parseCommand } from "../args.ts";
 import type { Context } from "../context.ts";
 import { CliError, errorMessage, refusal } from "../errors.ts";
-import { systemctl } from "../host/system.ts";
+import { startUnit, systemctl } from "../host/system.ts";
 import { step } from "../output.ts";
 import type { Invocation } from "../table.ts";
 import {
@@ -76,7 +76,7 @@ async function control(verb: Control, { ctx, args }: Invocation): Promise<void> 
         );
         continue;
       }
-      await systemctl(ctx, verb, unit);
+      await startUnit(ctx, verb, unit);
       const release = await runningRelease(ctx, name);
       const seconds = await verifyInstance(ctx, name, record.port, release);
       if (verb === "start") await systemctl(ctx, "enable", unit);

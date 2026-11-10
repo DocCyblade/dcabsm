@@ -33,7 +33,8 @@ const sysctls = () =>
   h.calls
     .filter(
       (c) =>
-        c.command === "systemctl" && !["is-active", "show", "daemon-reload"].includes(c.args[0]!),
+        c.command === "systemctl" &&
+        !["is-active", "show", "daemon-reload", "reset-failed"].includes(c.args[0]!),
     )
     .map((c) => c.args.join(" "));
 

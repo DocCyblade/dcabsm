@@ -3,7 +3,7 @@ import { backupRoot } from "../backup/archive.ts";
 import { hasData, RUNNING_STATES, takeBackup } from "../backup/create.ts";
 import type { Context } from "../context.ts";
 import { errorMessage } from "../errors.ts";
-import { systemctl } from "../host/system.ts";
+import { startUnit, systemctl } from "../host/system.ts";
 import { step } from "../output.ts";
 import { writeConfigJson } from "./files.ts";
 import { unitStateOf } from "./list.ts";
@@ -35,7 +35,7 @@ const unit = (name: string) => `dcabsm@${name}`;
 
 /** Starts the unit and checks it runs `release` (spec 6.2). */
 async function startAndVerify(ctx: Context, job: UpgradeJob, release: string): Promise<void> {
-  await systemctl(ctx, "start", unit(job.name));
+  await startUnit(ctx, "start", unit(job.name));
   const seconds = await verifyInstance(ctx, job.name, job.record.port, release);
   step(ctx, "done", `Started and verified: /health UP, /info ${release} (${seconds}s)`);
 }

@@ -5,7 +5,7 @@ import type { Context } from "../context.ts";
 import { CliError, errorMessage, firstLine, refusal } from "../errors.ts";
 import { formatColumns } from "../columns.ts";
 import { ensureDir, ownedByRoot } from "../fsutil.ts";
-import { systemctl } from "../host/system.ts";
+import { startUnit, systemctl } from "../host/system.ts";
 import { formatSize, treeSize } from "../host/tree.ts";
 import { unitStateOf } from "../instance/list.ts";
 import {
@@ -177,7 +177,7 @@ export async function takeBackup(ctx: Context, name: string, kind: Kind): Promis
   let startFailure: unknown;
   if (stopped) {
     try {
-      await systemctl(ctx, "start", unit);
+      await startUnit(ctx, "start", unit);
       step(ctx, "done", `Started ${name}`);
     } catch (err) {
       startFailure = err;
