@@ -10,6 +10,7 @@ import { backupPrune } from "./backup/prune.ts";
 import { instanceCreate } from "./instance/create.ts";
 import { instanceLogs, instanceRestart, instanceStart, instanceStop } from "./instance/controls.ts";
 import { instanceList, instanceShow } from "./instance/list.ts";
+import { instanceRemove } from "./instance/remove.ts";
 import { instanceResetPassword } from "./instance/reset-password.ts";
 import { instanceSet, instanceSettings, instanceUnset } from "./instance/settings.ts";
 import { releaseList } from "./release/list.ts";
@@ -125,6 +126,7 @@ export const table: Noun[] = [
         usage: "remove <name> [--confirm <name>]",
         summary: "Take a final Backup, then delete the Instance",
         changes: true,
+        run: instanceRemove,
       },
       {
         name: "start",

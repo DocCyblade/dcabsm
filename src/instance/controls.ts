@@ -53,6 +53,12 @@ async function targets(
   return out;
 }
 
+/** Stops the unit and keeps it from starting at boot (spec 4.8). */
+export async function stopInstance(ctx: Context, name: string): Promise<void> {
+  await systemctl(ctx, "stop", `dcabsm@${name}`);
+  await systemctl(ctx, "disable", `dcabsm@${name}`);
+}
+
 async function control(verb: Control, { ctx, args }: Invocation): Promise<void> {
   const { values, positionals } = parseCommand(args, { all: { type: "boolean" } });
   const list = await targets(ctx, verb, positionals, values.all);
@@ -62,8 +68,7 @@ async function control(verb: Control, { ctx, args }: Invocation): Promise<void> 
     if (list.length > 1) ctx.io.out(name);
     try {
       if (verb === "stop") {
-        await systemctl(ctx, "stop", unit);
-        await systemctl(ctx, "disable", unit);
+        await stopInstance(ctx, name);
         step(
           ctx,
           "done",
