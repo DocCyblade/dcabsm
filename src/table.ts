@@ -1,10 +1,12 @@
 import type { Context } from "./context.ts";
 import { hostDoctor } from "./host/doctor.ts";
+import { hostSet, hostSettings } from "./host/settings.ts";
 import { hostSetup } from "./host/setup.ts";
 import { hostCheckUpdates } from "./host/updates.ts";
 import { releaseInstall } from "./release/install.ts";
 import { backupCreate } from "./backup/create.ts";
 import { backupList } from "./backup/list.ts";
+import { backupPrune } from "./backup/prune.ts";
 import { instanceCreate } from "./instance/create.ts";
 import { instanceLogs, instanceRestart, instanceStart, instanceStop } from "./instance/controls.ts";
 import { instanceList, instanceShow } from "./instance/list.ts";
@@ -78,12 +80,18 @@ export const table: Noun[] = [
         summary: "Look for a newer Actual Release, Node patch and DCABSM version",
         run: hostCheckUpdates,
       },
-      { name: "settings", usage: "settings", summary: "Show the Host settings" },
+      {
+        name: "settings",
+        usage: "settings",
+        summary: "Show the Host settings",
+        run: hostSettings,
+      },
       {
         name: "set",
         usage: "set <key> <value>",
         summary: "Change one Host setting",
         changes: true,
+        run: hostSet,
       },
       {
         name: "nightly",
@@ -221,6 +229,7 @@ export const table: Noun[] = [
         usage: "prune [<names>|--all] [--dry-run]",
         summary: "Apply Retention by hand",
         changes: (args) => !args.includes("--dry-run"),
+        run: backupPrune,
       },
       {
         name: "schedule",
