@@ -8,6 +8,7 @@ import { backupList } from "./backup/list.ts";
 import { instanceCreate } from "./instance/create.ts";
 import { instanceLogs, instanceRestart, instanceStart, instanceStop } from "./instance/controls.ts";
 import { instanceList, instanceShow } from "./instance/list.ts";
+import { instanceUpgrade } from "./instance/upgrade.ts";
 import { instanceResetPassword } from "./instance/reset-password.ts";
 import { instanceSet, instanceSettings, instanceUnset } from "./instance/settings.ts";
 import { releaseList } from "./release/list.ts";
@@ -183,6 +184,7 @@ export const table: Noun[] = [
         usage: "upgrade <names>|--all [--to <v>] [--yes]",
         summary: "Move Instances to a newer Release",
         changes: true,
+        run: instanceUpgrade,
       },
       {
         name: "rollback",

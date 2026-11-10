@@ -33,7 +33,7 @@ import {
 /** Where Actual keeps what has no copy elsewhere. An Instance that never started leaves them empty. */
 const DATA_DIRS = ["data", "server-files", "user-files"];
 
-async function hasData(dir: string): Promise<boolean> {
+export async function hasData(dir: string): Promise<boolean> {
   for (const d of DATA_DIRS) {
     try {
       if ((await readdir(join(dir, d))).length > 0) return true;
@@ -55,6 +55,25 @@ async function freeBytes(ctx: Context, path: string): Promise<number> {
     );
   }
   return kb * 1024;
+}
+
+/**
+ * Fails, naming the Instance, unless the backup directory has room for a Backup of it. Run before the
+ * Instance stops. Reports the room it found as a step unless `quiet`.
+ */
+export async function checkSpace(ctx: Context, name: string, quiet = false): Promise<void> {
+  const root = await backupRoot(ctx);
+  await ensureDir(root, 0o700);
+  const need = await treeSize(instanceDir(ctx, name));
+  const free = await freeBytes(ctx, root);
+  if (free < need) {
+    throw new CliError(
+      `Not enough space in ${await logicalBackupRoot(ctx)} for a backup of ${name} (needs ~${formatSize(need)}, ${formatSize(free)} free). ${name} was not stopped.`,
+    );
+  }
+  if (!quiet) {
+    step(ctx, "done", `Free space: ${formatSize(free)}, backup needs ~${formatSize(need)}`);
+  }
 }
 
 async function manifestFor(
@@ -80,7 +99,12 @@ async function manifestFor(
 }
 
 /** Unit states that mean the Instance is up or on its way: it is stopped for the archive. */
-const RUNNING_STATES: readonly string[] = ["active", "activating", "reloading", "deactivating"];
+export const RUNNING_STATES: readonly string[] = [
+  "active",
+  "activating",
+  "reloading",
+  "deactivating",
+];
 
 /**
  * Takes one Backup of an Instance (spec 7.3). The caller holds the lock. A running Instance is stopped
@@ -95,14 +119,7 @@ export async function takeBackup(ctx: Context, name: string, kind: Kind): Promis
   await ensureDir(root, 0o700);
   await ensureDir(target, 0o700);
 
-  const need = await treeSize(dir);
-  const free = await freeBytes(ctx, root);
-  if (free < need) {
-    throw new CliError(
-      `Not enough space in ${await logicalBackupRoot(ctx)} for a backup of ${name} (needs ~${formatSize(need)}, ${formatSize(free)} free). ${name} was not stopped.`,
-    );
-  }
-  step(ctx, "done", `Free space: ${formatSize(free)}, backup needs ~${formatSize(need)}`);
+  await checkSpace(ctx, name);
 
   const time = ctx.now();
   const manifest = await manifestFor(ctx, name, kind, time, record.hostname);
