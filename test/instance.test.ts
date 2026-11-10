@@ -545,10 +545,51 @@ describe("instance list and show", () => {
       "INSTANCE  STATE    RELEASE  HOSTNAME          PORT   LAST SCHEDULED",
       "shop      active   26.11.1  shop.example.org  15127  none",
       "two       stopped  26.11.1  two.example.org   15128  none",
+      "  ! shop: no scheduled Backup in the last 48 hours",
+      "  ! two: no scheduled Backup in the last 48 hours",
       "",
       expect.stringMatching(/^DCABSM \S+$/),
       "→ No update check yet: sudo dcabsm host check-updates",
     ]);
+  });
+
+  describe("48-hour warning", () => {
+    const archive = async (name: string, stamp: string, kind = "scheduled") => {
+      const d = join(h.ctx.paths.under("/srv/dcabsm/backups"), name);
+      await mkdir(d, { recursive: true });
+      await writeFile(join(d, `${stamp}-${kind}-26.11.1.tar.gz`), "x");
+    };
+    const warnings = () => h.out.filter((l) => l.startsWith("  ! "));
+
+    it("is quiet with a scheduled Backup newer than 48 hours", async () => {
+      await start();
+      await shop();
+      await archive("shop", "20261107T130000Z");
+      h.out.length = 0;
+      await run(["instance", "list"], h.ctx);
+      expect(warnings()).toEqual([]);
+    });
+
+    it("warns for an older scheduled Backup, ignoring other kinds", async () => {
+      await start();
+      await shop();
+      await archive("shop", "20261107T110000Z");
+      await archive("shop", "20261109T110000Z", "manual");
+      h.out.length = 0;
+      await run(["instance", "list"], h.ctx);
+      expect(warnings()).toEqual(["  ! shop: no scheduled Backup in the last 48 hours"]);
+    });
+
+    it("says nothing when scheduled Backups are off", async () => {
+      await start();
+      await shop();
+      const path = join(dir("shop"), "config/instance.json");
+      const rec = JSON.parse(await read(path));
+      await writeFile(path, JSON.stringify({ ...rec, scheduledBackups: false }));
+      h.out.length = 0;
+      await run(["instance", "list"], h.ctx);
+      expect(warnings()).toEqual([]);
+    });
   });
 
   it("shows CHANGING for an unfinished Release change", async () => {

@@ -19,8 +19,12 @@ export interface SettingDef {
   firstRelease: string;
   /** Value written to `config.json` (lists become arrays). */
   toConfig(value: SettingValue): unknown;
-  /** Value Nginx and `instance settings` use when the setting is at default. */
-  defaultValue?: number;
+}
+
+/** An upload limit in MB: Nginx sizes `client_max_body_size` from these (spec 5.2). */
+export interface UploadDef extends SettingDef {
+  /** Actual's default, in MB. */
+  defaultValue: number;
 }
 
 function megabytes(text: string): number | undefined {
@@ -42,7 +46,7 @@ function networkList(text: string): string | undefined {
 }
 
 const identity = (v: SettingValue): unknown => v;
-const upload = (key: string, actualKey: string, defaultValue: number): SettingDef => ({
+const upload = (key: string, actualKey: string, defaultValue: number): UploadDef => ({
   key,
   actualKey,
   defaultText: String(defaultValue),
@@ -53,11 +57,16 @@ const upload = (key: string, actualKey: string, defaultValue: number): SettingDe
   toConfig: identity,
 });
 
-/** The settings table (spec 4.11). */
-export const SETTINGS: readonly SettingDef[] = [
+/** The upload limits. */
+export const UPLOAD_SETTINGS: readonly UploadDef[] = [
   upload("upload-sync-limit-mb", "upload.fileSizeSyncLimitMB", 20),
   upload("upload-encrypted-sync-limit-mb", "upload.syncEncryptedFileSizeLimitMB", 50),
   upload("upload-limit-mb", "upload.fileSizeLimitMB", 20),
+];
+
+/** The settings table (spec 4.11). */
+export const SETTINGS: readonly SettingDef[] = [
+  ...UPLOAD_SETTINGS,
   {
     key: "openid-enforce",
     actualKey: "enforceOpenId",
@@ -112,12 +121,15 @@ export const NEVER_SET = ["loginMethod", "webRoot", "env", "mode", "projectRoot"
 /** Why a key that is not in the table can't be set, if it is a known Actual key. */
 export function neverSettable(key: string): string | undefined {
   if (ALWAYS_SET.includes(key)) return "DCABSM always sets it";
-  if (key === "loginMethod") return "password and OpenID are switched in Actual's web UI";
   if (key === "https" || key.startsWith("https.")) return "Nginx handles TLS";
   if (key === "openId" || key.startsWith("openId.")) {
     return "OpenID is set up in Actual's web UI (ADR-0005)";
   }
-  if (NEVER_SET.includes(key)) return "DCABSM does not expose it";
+  if (NEVER_SET.includes(key)) {
+    return key === "loginMethod"
+      ? "password and OpenID are switched in Actual's web UI"
+      : "DCABSM does not expose it";
+  }
   return undefined;
 }
 
@@ -136,18 +148,17 @@ export function settingsSummary(
 
 /** The value in force: what was set, or Actual's default. */
 export function effectiveMb(
-  def: SettingDef,
+  def: UploadDef,
   settings: Record<string, SettingValue> | undefined,
 ): number {
   const v = settings?.[def.key];
-  return typeof v === "number" ? v : (def.defaultValue as number);
+  return typeof v === "number" ? v : def.defaultValue;
 }
 
 /** The upload limits the vhost sizes `client_max_body_size` from. */
-export const UPLOAD_KEYS = SETTINGS.filter((s) => s.defaultValue !== undefined).map((s) => s.key);
+export const UPLOAD_KEYS: readonly string[] = UPLOAD_SETTINGS.map((s) => s.key);
 
 /** Nginx's `client_max_body_size` in MB: just above the largest upload limit (spec 5.2). */
 export function bodyLimitMb(settings: Record<string, SettingValue> | undefined): number {
-  const defs = SETTINGS.filter((s) => UPLOAD_KEYS.includes(s.key));
-  return Math.max(...defs.map((d) => effectiveMb(d, settings))) + 1;
+  return Math.max(...UPLOAD_SETTINGS.map((d) => effectiveMb(d, settings))) + 1;
 }

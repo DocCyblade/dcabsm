@@ -14,7 +14,7 @@ import {
   planRelease,
 } from "../release/install.ts";
 import { validateCertificateFiles, type CertificateInfo } from "../cert.ts";
-import { configJson, vhostConf } from "./files.ts";
+import { vhostConf, writeConfigJson } from "./files.ts";
 import {
   accountOf,
   checkName,
@@ -225,14 +225,12 @@ async function writeConfigFiles(
 ): Promise<void> {
   const dir = instanceDir(ctx, name);
   await symlink(join(ctx.paths.releases, release), join(dir, "release"));
-  const config = join(dir, "config", "config.json");
   await writeFileAtomic(
     join(dir, "config", "instance.json"),
     `${JSON.stringify(record, null, 2)}\n`,
     0o600,
   );
-  await writeFileAtomic(config, configJson(name, record, release), 0o640);
-  await run(ctx, "chown", [`root:${accountOf(name)}`, config]);
+  await writeConfigJson(ctx, name, record, release);
 }
 
 /** Puts `cert.pem` and `key.pem` in the Instance's `nginx/`, root-only (spec 5.5). */

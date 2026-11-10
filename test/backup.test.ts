@@ -14,6 +14,8 @@ let h: Harness;
 let net: FakeNet;
 /** Instances `systemctl is-active` calls stopped. */
 let stopped: Set<string>;
+/** What `is-active` says for an Instance that is not stopped. */
+let unitState = "active";
 afterEach(() => h.cleanup());
 
 const ok = (stdout = ""): RunResult => ({ code: 0, stdout, stderr: "" });
@@ -25,6 +27,7 @@ async function start(names: string[], empty: string[] = []): Promise<void> {
   const host = fakeHost();
   net = fakeNet({ serverVersion: "26.11.1" });
   stopped = new Set();
+  unitState = "active";
   h = await harness({
     net,
     runner: (command, args) => {
@@ -38,7 +41,7 @@ async function start(names: string[], empty: string[] = []): Promise<void> {
         const unit = args.at(-1)!.replace(/^dcabsm@/, "");
         return stopped.has(unit)
           ? { code: 3, stdout: "inactive\n", stderr: "" }
-          : { code: 0, stdout: "active\n", stderr: "" };
+          : { code: unitState === "active" ? 0 : 3, stdout: `${unitState}\n`, stderr: "" };
       }
       return host.run(command, args);
     },
@@ -110,6 +113,34 @@ describe("backup create", () => {
     expect(h.out).toContain(`shop      ok      ${FILE}`);
   });
 
+  it.each(["activating", "reloading", "deactivating"])(
+    "treats %s as running: stops, archives, starts",
+    async (state) => {
+      await start(["shop"]);
+      unitState = state;
+      expect(await backup("create", "shop")).toBe(0);
+      expect(systemctls()).toEqual([
+        ["stop", "dcabsm@shop"],
+        ["start", "dcabsm@shop"],
+      ]);
+    },
+  );
+
+  it("leaves a failed unit as it was", async () => {
+    await start(["shop"]);
+    unitState = "failed";
+    expect(await backup("create", "shop")).toBe(0);
+    expect(systemctls()).toEqual([]);
+  });
+
+  it("refuses during an unfinished Release change", async () => {
+    await start(["shop"]);
+    await writeFile(join(h.ctx.paths.instances, "shop", ".changing-release"), "");
+    expect(await backup("create", "shop")).toBe(1);
+    expect(h.out.join("\n")).toContain("unfinished Release change");
+    expect(systemctls()).toEqual([]);
+  });
+
   it("archives a stopped Instance without starting it", async () => {
     await start(["shop"]);
     stopped.add("shop");
@@ -123,6 +154,7 @@ describe("backup create", () => {
     expect(await backup("create", "shop")).toBe(0);
     expect(h.out.join("\n")).toContain("shop has no data yet");
     expect(h.out).toContain("shop      no data  -");
+    expect(h.out).toContain("  · 0 backed up, 1 skipped (no data), 0 failed");
     expect(await readdir(backups())).toEqual([]);
     expect(systemctls()).toEqual([]);
   });
@@ -160,6 +192,7 @@ describe("backup create", () => {
     expect(await readdir(backups("alpha"))).toEqual([]);
     expect(await readdir(backups("beta"))).toEqual([FILE]);
     expect(h.out).toContain("Summary");
+    expect(h.out).toContain("  · 1 backed up, 0 skipped (no data), 1 failed");
     expect(h.out).toContain("alpha     failed  -");
     expect(h.out).toContain(`beta      ok      ${FILE}`);
     expect(h.out.join("\n")).toContain("tar failed: tar: No space left on device");

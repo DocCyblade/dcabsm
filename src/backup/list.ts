@@ -1,6 +1,7 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { parseCommand } from "../args.ts";
+import { formatColumns } from "../columns.ts";
 import { formatSize } from "../host/tree.ts";
 import { checkName, instanceNames, requireInstance } from "../instance/record.ts";
 import type { Invocation } from "../table.ts";
@@ -42,12 +43,7 @@ export async function backupList({ ctx, args }: Invocation): Promise<void> {
       ["ARCHIVE", "KIND", "RELEASE", "SIZE"],
       ...archives.map((a) => [a.file, a.kind, a.release, formatSize(a.size)]),
     ];
-    const widths = [0, 1, 2].map((i) => Math.max(...table.map((r) => r[i]!.length)) + 2);
-    for (const r of table) {
-      ctx.io.out(
-        `${r[0]!.padEnd(widths[0]!)}${r[1]!.padEnd(widths[1]!)}${r[2]!.padEnd(widths[2]!)}${r[3]}`,
-      );
-    }
+    for (const line of formatColumns(table)) ctx.io.out(line);
   }
   for (const dir of removed) {
     const count = (await readdir(join(await backupRoot(ctx), dir))).filter((f) =>

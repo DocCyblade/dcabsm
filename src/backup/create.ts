@@ -1,12 +1,21 @@
-import { chmod, mkdir, readdir, readlink, rename, rm, stat, writeFile } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { chmod, mkdir, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { parseCommand } from "../args.ts";
 import type { Context } from "../context.ts";
 import { CliError, errorMessage, firstLine, refusal } from "../errors.ts";
-import { ensureDir, exists, ownedByRoot } from "../fsutil.ts";
+import { formatColumns } from "../columns.ts";
+import { ensureDir, ownedByRoot } from "../fsutil.ts";
 import { systemctl } from "../host/system.ts";
 import { formatSize, treeSize } from "../host/tree.ts";
-import { checkName, instanceDir, instanceNames, requireInstance } from "../instance/record.ts";
+import { unitStateOf } from "../instance/list.ts";
+import {
+  checkName,
+  instanceDir,
+  instanceNames,
+  refuseIfChanging,
+  requireInstance,
+  runningRelease,
+} from "../instance/record.ts";
 import { step } from "../output.ts";
 import { releaseNodeMajor } from "../release/install.ts";
 import { linkedPatch } from "../release/node.ts";
@@ -55,7 +64,7 @@ async function manifestFor(
   time: Date,
   hostname: string,
 ): Promise<Manifest> {
-  const release = basename(await readlink(join(instanceDir(ctx, name), "release")));
+  const release = await runningRelease(ctx, name);
   const major = await releaseNodeMajor(ctx, release);
   const node = (major === undefined ? undefined : await linkedPatch(ctx, major)) ?? "unknown";
   return {
@@ -70,15 +79,8 @@ async function manifestFor(
   };
 }
 
-/** Marks that mean the Instance is down on purpose or mid-change. */
-async function refuseIfChanging(ctx: Context, name: string): Promise<void> {
-  if (await exists(join(instanceDir(ctx, name), ".changing-release"))) {
-    throw new CliError(
-      `${name} has an unfinished Release change.`,
-      `Finish it first: sudo dcabsm instance rollback ${name}`,
-    );
-  }
-}
+/** Unit states that mean the Instance is up or on its way: it is stopped for the archive. */
+const RUNNING_STATES: readonly string[] = ["active", "activating", "reloading", "deactivating"];
 
 /**
  * Takes one Backup of an Instance (spec 7.3). The caller holds the lock. A running Instance is stopped
@@ -108,7 +110,7 @@ export async function takeBackup(ctx: Context, name: string, kind: Kind): Promis
   const temp = join(target, `.${file}`);
   const stage = join(target, `.${file}.stage`);
   const unit = `dcabsm@${name}`;
-  const running = (await ctx.runner.run("systemctl", ["is-active", "--quiet", unit])).code === 0;
+  const running = RUNNING_STATES.includes(await unitStateOf(ctx, name));
 
   let failure: unknown;
   let stopped = false;
@@ -223,12 +225,16 @@ export async function backupCreate({ ctx, args }: Invocation): Promise<number> {
 
   ctx.io.out("");
   ctx.io.out("Summary");
-  const widths = [0, 1].map((i) => Math.max(...rows.map((r) => r[i]!.length)) + 2);
-  for (const r of rows) {
-    ctx.io.out(`${r[0]!.padEnd(widths[0]!)}${r[1]!.padEnd(widths[1]!)}${r[2]}`);
-  }
+  for (const line of formatColumns(rows)) ctx.io.out(line);
+  const count = (result: string) => rows.slice(1).filter((r) => r[1] === result).length;
+  const failed = count("failed");
+  step(
+    ctx,
+    "info",
+    `${count("ok")} backed up, ${count("no data")} skipped (no data), ${failed} failed`,
+  );
   ctx.io.out(
     `  · Archives are unencrypted and as sensitive as root on this Host. They live in ${await logicalBackupRoot(ctx)}/<name>/.`,
   );
-  return rows.slice(1).some((r) => r[1] === "failed") ? 1 : 0;
+  return failed > 0 ? 1 : 0;
 }

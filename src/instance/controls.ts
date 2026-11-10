@@ -1,16 +1,25 @@
-import { readlink } from "node:fs/promises";
-import { basename, join } from "node:path";
 import { parseCommand } from "../args.ts";
 import type { Context } from "../context.ts";
 import { CliError, errorMessage, refusal } from "../errors.ts";
-import { exists } from "../fsutil.ts";
 import { systemctl } from "../host/system.ts";
 import { step } from "../output.ts";
 import type { Invocation } from "../table.ts";
-import { instanceDir, instanceNames, requireInstance, type InstanceRecord } from "./record.ts";
+import {
+  instanceNames,
+  refuseIfChanging,
+  requireInstance,
+  runningRelease,
+  type InstanceRecord,
+} from "./record.ts";
 import { verifyInstance } from "./verify.ts";
 
 type Control = "start" | "stop" | "restart";
+
+/** One Instance a control command works on. */
+interface Target {
+  name: string;
+  record: InstanceRecord;
+}
 
 /** Resolves `<names>|--all` to existing Instances, refusing before anything runs. */
 async function targets(
@@ -18,7 +27,7 @@ async function targets(
   verb: Control,
   names: string[],
   all: boolean | undefined,
-): Promise<Array<[string, InstanceRecord]>> {
+): Promise<Target[]> {
   if (all && names.length > 0) {
     throw refusal(
       "Give Instance names or --all, not both.",
@@ -34,33 +43,21 @@ async function targets(
         : `Usage: dcabsm instance ${verb} <names>|--all`,
     );
   }
-  const out: Array<[string, InstanceRecord]> = [];
+  const out: Target[] = [];
   for (const name of list) {
     const record = await requireInstance(ctx, name);
-    if (await exists(join(instanceDir(ctx, name), ".changing-release"))) {
-      throw refusal(
-        `${name} has an unfinished Release change.`,
-        "Finish it first: dcabsm instance upgrade or dcabsm instance rollback",
-      );
-    }
-    out.push([name, record]);
+    // Stopping is always allowed: it is how the System Admin gets out of a half-done change.
+    if (verb !== "stop") await refuseIfChanging(ctx, name);
+    out.push({ name, record });
   }
   return out;
-}
-
-export async function runningRelease(ctx: Context, name: string): Promise<string> {
-  try {
-    return basename(await readlink(join(instanceDir(ctx, name), "release")));
-  } catch {
-    throw new CliError(`${name} has no Release link.`, "Run: sudo dcabsm host doctor");
-  }
 }
 
 async function control(verb: Control, { ctx, args }: Invocation): Promise<void> {
   const { values, positionals } = parseCommand(args, { all: { type: "boolean" } });
   const list = await targets(ctx, verb, positionals, values.all);
   let failed = 0;
-  for (const [name, record] of list) {
+  for (const { name, record } of list) {
     const unit = `dcabsm@${name}`;
     if (list.length > 1) ctx.io.out(name);
     try {
