@@ -3,7 +3,7 @@ import { dirname } from "node:path";
 import type { Context } from "./context.ts";
 import { CliError } from "./errors.ts";
 
-interface Holder {
+export interface Holder {
   pid: number;
   command: string;
 }
@@ -28,6 +28,12 @@ async function readHolder(path: string): Promise<Holder | undefined> {
     // Missing or unreadable: no live holder.
   }
   return undefined;
+}
+
+/** The live command holding the lock, if any. Read-only: a stale lock is left for the next changing command. */
+export async function lockHolder(ctx: Context): Promise<Holder | undefined> {
+  const holder = await readHolder(ctx.paths.lock);
+  return holder && alive(holder.pid) ? holder : undefined;
 }
 
 /**

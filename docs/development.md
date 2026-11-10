@@ -2,12 +2,12 @@
 
 DCABSM is TypeScript on Node 24, bundled by esbuild into one JS file. It has no runtime dependencies. The exact Node patch is in `.node-version`, and CI and the bundle target use it.
 
-| Command | What it does |
-|---|---|
-| `npm ci` | Install the tools |
-| `npm run check` | Typecheck, lint, format check and unit tests |
-| `npm test` | Unit tests only (Vitest) |
-| `npm run build` | Bundle to `dist/dcabsm.js` |
+| Command          | What it does                                  |
+| ---------------- | --------------------------------------------- |
+| `npm ci`         | Install the tools                             |
+| `npm run check`  | Typecheck, lint, format check and unit tests  |
+| `npm test`       | Unit tests only (Vitest)                      |
+| `npm run build`  | Bundle to `dist/dcabsm.js`                    |
 | `npm run format` | Format `src`, `test` and `scripts` with oxfmt |
 
 ## Layout
@@ -19,8 +19,22 @@ DCABSM is TypeScript on Node 24, bundled by esbuild into one JS file. It has no 
 - `src/errors.ts`, `src/help.ts`, `src/version.ts`: exit codes and error text, the `help` text, and the version and layout number.
 - `src/completion.ts`: generates the bash completion script from the table. `scripts/build.mjs` writes it to `dist/share/bash-completion/completions/dcabsm`. The real-bash test needs bash 5 and `bash-completion`, and skips without them (macOS ships bash 3.2).
 - `scripts/build.mjs`: the esbuild bundle; it injects the version from `package.json`.
-- `src/host/`: Host-level code. `os.ts` holds the supported OS table (spec 1.4), `checks.ts` the refusals (10.3), `setup.ts` `host setup`, `config.ts` `dcabsm.json`, and `notices.ts` the banner and OS warning every other command prints.
+- `scripts/package.ts`, `scripts/tarball.ts`: `npm run package` (after `npm run build`) builds `dist/release/dcabsm-<ver>-linux-{amd64,arm64}.tar.gz` and `SHA256SUMS`. It fetches the Node in `.node-version`, checks it with `gpgv` against `scripts/node-release-keys.asc` (Node's active release keys; the fingerprints are in `scripts/node-release-keys.list`), and ships those keys as `share/node-release-keys.gpg`. Nothing is signed there; CI never signs.
+- `install.sh`: the first-install script (spec 11.3). Its top block holds the only release-time placeholders (GitHub owner, key fingerprint, key keyring). `test/install.test.ts` fills them in and runs it under bash on a temporary root, with `curl`, `gpgv`, `uname` and `id` stubbed.
+- `src/host/`: Host-level code. `os.ts` holds the supported OS table (spec 1.4), `checks.ts` the refusals (10.3), `setup.ts` `host setup`, `config.ts` `dcabsm.json`, and `notices.ts` the banner and OS warning every other command prints. `checks.ts` holds the one list of Host checks (`hostChecks`) that setup and `host doctor` share: each has a test, a severity and an optional fix. `health.ts` and `tree.ts` hold the doctor-only checks, and `doctor.ts` runs the list, asks about fixes and sets the exit code.
+- `src/host/system.ts`: what the package manager and service manager say (`isInstalled`, Nginx state, `nginxTestFailure`, `systemctl`), shared by setup, doctor and `instance create`.
+- `src/host/updates.ts`: `host check-updates` (the one command that uses the network for updates), the stored result and the `instance list` footer built from it.
+- `src/instance/`: the `instance` commands. `create.ts` makes one, `list.ts` lists and shows, `record.ts` reads `instance.json` and names, `files.ts` renders `config.json` and the vhost, and `verify.ts` is Verification (spec 6.2).
 - `src/args.ts`, `src/fsutil.ts`, `src/output.ts`: flag parsing, file and directory helpers, and the step marks.
 - `src/paths.ts`: every path hangs off one root. `DCABSM_ROOT` moves it; the default is `/`. In the shipped completion script it is a test seam only: it lets the real-bash tests run under a temporary root.
 - `src/prompt.ts`, `src/lock.ts`, `src/log.ts`: the helpers every command shares.
 - `test/helpers.ts`: a `Context` on a temporary root with a faked runner and fetcher. Tests assert on the files left behind.
+
+## Before the first release
+
+The `release guard` job fails a `v*` tag while any of this is undone:
+
+1. Set the GitHub owner: `GITHUB_OWNER` in `install.sh`.
+2. Generate the signing key.
+3. Fill `KEY_FINGERPRINT` and `KEY_KEYRING_B64` in `install.sh` (`gpg --export <fpr> | base64 | tr -d '\n'`).
+4. Replace the `XXXX` fingerprint in `README.md` and `docs/cli.md`.

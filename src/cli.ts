@@ -83,14 +83,22 @@ async function dispatch(argv: string[], ctx: Context): Promise<number> {
   }
 
   if (!isChanging(verb, args)) {
-    await handler({ ctx, args });
-    return EXIT_OK;
+    return (await handler({ ctx, args })) ?? EXIT_OK;
   }
 
   const name = `${noun.name} ${verb.name}`;
-  const release = await acquireLock(ctx, commandLine);
+  const release = await acquireLock(ctx, commandLine).catch((err: unknown) => {
+    // Doctor's exit 1 also means warnings, so say this one is only the lock.
+    if (name !== "host doctor" || !(err instanceof CliError)) throw err;
+    throw new CliError(
+      `${err.message} host doctor --fix did not run: this is the lock, not a problem on the Host.`,
+      err.hint,
+      err.code,
+    );
+  });
+  let code: void | number;
   try {
-    await handler({ ctx, args });
+    code = await handler({ ctx, args });
   } catch (err) {
     await logChange(ctx, name, err instanceof Cancelled ? "cancelled" : "failed");
     throw err;
@@ -98,5 +106,5 @@ async function dispatch(argv: string[], ctx: Context): Promise<number> {
     await release();
   }
   await logChange(ctx, name, "ok");
-  return EXIT_OK;
+  return code ?? EXIT_OK;
 }

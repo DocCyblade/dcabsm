@@ -1,5 +1,7 @@
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { dirname } from "node:path";
+import { completionScript } from "../src/completion.ts";
 import { afterEach, describe, expect, it } from "vitest";
 import { run } from "../src/cli.ts";
 import { nginxOrgInPolicy, parseListeners } from "../src/host/checks.ts";
@@ -25,6 +27,18 @@ const pathExists = (p: string) =>
     () => true,
     () => false,
   );
+
+describe("host setup and the completion script", () => {
+  it("writes it as an owned file with its hash recorded", async () => {
+    expect(await setup(fakeHost())).toBe(0);
+    const logical = "/usr/share/bash-completion/completions/dcabsm";
+    const text = await readFile(h.ctx.paths.under(logical), "utf8");
+    expect(text).toBe(completionScript());
+    expect((await readConfig()).ownedFiles[logical]).toBe(
+      createHash("sha256").update(text).digest("hex"),
+    );
+  });
+});
 
 describe("host setup on a clean Debian 13 VM", () => {
   it("installs nginx and openssl, then leaves the Host tree and dcabsm.json", async () => {
@@ -350,7 +364,7 @@ describe("a Host that later runs an unsupported OS", () => {
     h.err.length = 0;
     h.calls.length = 0;
 
-    expect(await run(["instance", "list"], h.ctx)).toBe(1); // reaches the handler: "not built yet"
+    expect(await run(["cert", "test"], h.ctx)).toBe(1); // reaches the handler: "not built yet"
     expect(h.err[0]).toBe(
       "! Fedora Linux 41 on amd64 is not a supported Host. Backup and restore still work, but you are on your own.",
     );
@@ -362,8 +376,8 @@ describe("a Host that later runs an unsupported OS", () => {
   it("stays quiet on a supported OS", async () => {
     await setup(fakeHost());
     h.err.length = 0;
-    await run(["instance", "list"], h.ctx);
-    expect(h.err).toEqual(["error: instance list is not built yet.", "  See: dcabsm help"]);
+    await run(["cert", "test"], h.ctx);
+    expect(h.err).toEqual(["error: cert test is not built yet.", "  See: dcabsm help"]);
   });
 });
 

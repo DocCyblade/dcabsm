@@ -1,6 +1,10 @@
 import type { Context } from "./context.ts";
+import { hostDoctor } from "./host/doctor.ts";
 import { hostSetup } from "./host/setup.ts";
+import { hostCheckUpdates } from "./host/updates.ts";
 import { releaseInstall } from "./release/install.ts";
+import { instanceCreate } from "./instance/create.ts";
+import { instanceList, instanceShow } from "./instance/list.ts";
 import { releaseList } from "./release/list.ts";
 import { versionLine } from "./version.ts";
 
@@ -9,7 +13,8 @@ export interface Invocation {
   args: string[];
 }
 
-export type Handler = (inv: Invocation) => Promise<void>;
+/** A handler may return its own exit code; none means 0. */
+export type Handler = (inv: Invocation) => Promise<void | number>;
 
 export interface Verb {
   name: string;
@@ -54,11 +59,13 @@ export const table: Noun[] = [
         usage: "doctor [--fix] [--yes]",
         summary: "Check the Host and every Instance, and optionally fix what DCABSM owns",
         changes: (args) => args.includes("--fix"),
+        run: hostDoctor,
       },
       {
         name: "check-updates",
         usage: "check-updates",
         summary: "Look for a newer Actual Release, Node patch and DCABSM version",
+        run: hostCheckUpdates,
       },
       { name: "settings", usage: "settings", summary: "Show the Host settings" },
       {
@@ -83,14 +90,16 @@ export const table: Noun[] = [
         name: "list",
         usage: "list",
         summary: "The overview: every Instance, then the last update check",
+        run: instanceList,
       },
-      { name: "show", usage: "show <name>", summary: "One Instance in detail" },
+      { name: "show", usage: "show <name>", summary: "One Instance in detail", run: instanceShow },
       {
         name: "create",
         usage:
           "create <name> --hostname <host> (--cert <f> --key <f> | --self-signed) [--release <v>]",
         summary: "Create an Instance",
         changes: true,
+        run: instanceCreate,
       },
       {
         name: "remove",
@@ -255,7 +264,9 @@ export const table: Noun[] = [
         summary: "Print the installed version. dcabsm --version does the same",
         noRoot: true,
         beforeSetup: true,
-        run: async ({ ctx }) => ctx.io.out(versionLine()),
+        run: async ({ ctx }) => {
+          ctx.io.out(versionLine());
+        },
       },
     ],
   },

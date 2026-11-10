@@ -16,6 +16,12 @@ export interface FakeNet {
   actual: Record<string, string>;
   latest: string;
   index: NodeEntry[];
+  /** The newest stable DCABSM on GitHub, without the `v`. */
+  dcabsmLatest: string;
+  /** Node's release schedule: `v<major>` → end-of-life date. */
+  nodeEnd: Record<string, string>;
+  /** Hosts that cannot be reached: a fetch to them throws. */
+  down: string[];
   /** Make `gpgv` reject the signature. */
   badSignature: boolean;
   /** Serve a tarball that does not match SHASUMS256.txt. */
@@ -24,6 +30,12 @@ export interface FakeNet {
   nativeFails: boolean;
   /** Directories whose native-module check fails, whatever `nativeFails` says. */
   brokenDirs: string[];
+  /** Whether a started Instance's `/health` answers UP. */
+  serverUp: boolean;
+  /** The version a started Instance's `/info` reports. */
+  serverVersion: string;
+  /** Answer every request with a 503. */
+  offline: boolean;
   /** Everything fetched, in order. */
   fetched: string[];
   fetch(url: string): FetchResult | undefined;
@@ -49,14 +61,30 @@ export function fakeNet(overrides: Partial<FakeNet> = {}): FakeNet {
       { version: "v22.21.0", lts: "Jod" },
       { version: "v20.19.5", lts: "Iron" },
     ],
+    dcabsmLatest: "1.3.0",
+    nodeEnd: { v20: "2026-04-30", v22: "2027-04-30", v24: "2028-04-30" },
+    down: [],
     badSignature: false,
     badChecksum: false,
     nativeFails: false,
     brokenDirs: [],
+    serverUp: true,
+    serverVersion: "26.11.1",
+    offline: false,
     fetched: [],
     ...overrides,
     fetch(url) {
       net.fetched.push(url);
+      if (net.offline) return { status: 503, body: enc("offline") };
+      if (net.down.includes(new URL(url).host)) return undefined;
+      if (url === "https://api.github.com/repos/DocCyblade/dcabsm/releases/latest") {
+        return json({ tag_name: `v${net.dcabsmLatest}` });
+      }
+      if (url === "https://raw.githubusercontent.com/nodejs/Release/main/schedule.json") {
+        return json(
+          Object.fromEntries(Object.entries(net.nodeEnd).map(([k, end]) => [k, { end }])),
+        );
+      }
       const reg = /^https:\/\/registry\.npmjs\.org\/@actual-app%2fsync-server\/(.+)$/.exec(url);
       if (reg) {
         const v = reg[1] === "latest" ? net.latest : reg[1]!;
@@ -67,6 +95,13 @@ export function fakeNet(overrides: Partial<FakeNet> = {}): FakeNet {
           version: v,
           engines: engines ? { node: engines } : {},
         });
+      }
+      const local = /^http:\/\/127\.0\.0\.1:\d+\/(health|info)$/.exec(url);
+      if (local) {
+        if (!net.serverUp) return { status: 502, body: enc("down") };
+        return local[1] === "health"
+          ? json({ status: "UP" })
+          : json({ build: { name: "@actual-app/sync-server", version: net.serverVersion } });
       }
       if (url === "https://nodejs.org/dist/index.json") return json(net.index);
       const dist = /^https:\/\/nodejs\.org\/dist\/v([\d.]+)\/(.+)$/.exec(url);

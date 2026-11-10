@@ -31,6 +31,15 @@ export interface FakeHost {
   aptResult: RunResult;
   /** pid → `readlink -f /proc/<pid>/exe`. */
   exe: Record<number, string>;
+  /** Units systemd says are active (`nginx`) or enabled (`nginx`, `dcabsm-nightly.timer`). */
+  active: Set<string>;
+  enabled: Set<string>;
+  /** `ufw status` output; empty when ufw is not installed. */
+  ufw: string;
+  /** The device `df` reports for the backup directory and for the Instance data. */
+  backupDevice: string;
+  dataDevice: string;
+  systemctl(args: string[]): RunResult;
   run(command: string, args: string[]): RunResult;
 }
 
@@ -44,7 +53,22 @@ export function fakeHost(overrides: Partial<FakeHost> = {}): FakeHost {
     nginxTest: ok("", "nginx: configuration file /etc/nginx/nginx.conf test is successful"),
     aptResult: ok(),
     exe: {},
+    active: new Set(["nginx"]),
+    enabled: new Set(["nginx", "dcabsm-nightly.timer"]),
+    ufw: "",
+    backupDevice: "/dev/vdb1",
+    dataDevice: "/dev/vda1",
     ...overrides,
+    systemctl(args) {
+      const unit = (args[args.length - 1] ?? "").replace(/\.service$/, "");
+      const yes = (set: Set<string>) => (set.has(unit) ? ok() : fail("", 3));
+      if (args[0] === "is-active") return yes(host.active);
+      if (args[0] === "is-enabled") return yes(host.enabled);
+      if (args[0] === "enable") host.enabled.add(unit);
+      if (args[0] === "enable" && args.includes("--now")) host.active.add(unit);
+      if (args[0] === "start") host.active.add(unit);
+      return ok();
+    },
     run(command, args) {
       if (command === "env" && args[0] === "LC_ALL=C") return host.run(args[1]!, args.slice(2));
       const line = [command, ...args].join(" ");
@@ -60,6 +84,16 @@ export function fakeHost(overrides: Partial<FakeHost> = {}): FakeHost {
         return host.installed.has(pkg) ? ok("install ok installed") : fail("no packages found");
       }
       if (command === "nginx") return host.nginxTest;
+      if (command === "systemctl") return host.systemctl(args);
+      if (command === "ufw") return host.ufw === "" ? fail("not found", 127) : ok(host.ufw);
+      if (command === "df") {
+        const dev = args[args.length - 1]!.includes("/instances")
+          ? host.dataDevice
+          : host.backupDevice;
+        return ok(
+          `Filesystem 1024-blocks Used Available Capacity Mounted on\n${dev} 100 1 99 1% /\n`,
+        );
+      }
       if (command === "env" && args.includes("apt-get")) {
         if (host.aptResult.code === 0) {
           for (const pkg of args.slice(args.indexOf("-y") + 1)) host.installed.add(pkg);

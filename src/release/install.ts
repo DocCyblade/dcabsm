@@ -176,7 +176,7 @@ export async function anyReleaseLoads(ctx: Context): Promise<boolean> {
 }
 
 /** Whether an installed Release's native modules load with its recorded Node runtime. */
-async function releaseIntact(ctx: Context, version: string): Promise<boolean> {
+export async function releaseIntact(ctx: Context, version: string): Promise<boolean> {
   const major = await releaseNodeMajor(ctx, version);
   if (major === undefined) return false;
   const bin = join(ctx.paths.node, String(major), "bin", "node");

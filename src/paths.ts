@@ -12,6 +12,8 @@ export interface Paths {
   srv: string;
   node: string;
   acme: string;
+  /** The last `host check-updates` result (spec 3.5). */
+  updateCheck: string;
   instances: string;
   releases: string;
   /** Node's release signing keys, shipped inside the running DCABSM version (spec 3.1). */
@@ -37,6 +39,7 @@ export function pathsUnder(root: string, installDir: string): Paths {
     srv,
     node: join(srv, "node"),
     acme: join(srv, "acme"),
+    updateCheck: join(srv, "update-check.json"),
     instances: join(srv, "instances"),
     releases: join(srv, "releases"),
     nodeKeyring: join(installDir, "share/node-release-keys.gpg"),
