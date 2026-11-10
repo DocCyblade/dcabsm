@@ -1,8 +1,8 @@
-import { readdir, readFile, readlink } from "node:fs/promises";
+import { readdir, readFile, readlink, rm } from "node:fs/promises";
 import { basename, join } from "node:path";
 import type { Context } from "../context.ts";
 import { CliError, refusal } from "../errors.ts";
-import { exists } from "../fsutil.ts";
+import { exists, readTextOr, writeFileAtomic } from "../fsutil.ts";
 import { INSTANCES_LOGICAL } from "../paths.ts";
 
 /** The first port an Instance can take (spec 4.3). */
@@ -71,6 +71,33 @@ export const changingMarker = (ctx: Context, name: string): string =>
 
 export const isChanging = (ctx: Context, name: string): Promise<boolean> =>
   exists(changingMarker(ctx, name));
+
+/** What `.changing-release` records (spec 6.6). */
+export interface ChangeMarker {
+  operation: "upgrade" | "rollback" | "restore";
+  from: string;
+  to: string;
+  /** The Backup the change can be undone from, as a path on disk. */
+  backup: string;
+  /** True while data is being restored from `backup`. */
+  restoringData: boolean;
+}
+
+export async function writeMarker(ctx: Context, name: string, marker: ChangeMarker): Promise<void> {
+  await writeFileAtomic(changingMarker(ctx, name), `${JSON.stringify(marker, null, 2)}\n`, 0o600);
+}
+
+/** The marker, or undefined when there is none or it is not readable JSON. */
+export async function readMarker(ctx: Context, name: string): Promise<ChangeMarker | undefined> {
+  try {
+    return JSON.parse((await readTextOr(changingMarker(ctx, name))) ?? "") as ChangeMarker;
+  } catch {
+    return undefined;
+  }
+}
+
+export const removeMarker = (ctx: Context, name: string): Promise<void> =>
+  rm(changingMarker(ctx, name), { force: true });
 
 /** Refuses while a Release change is unfinished. */
 export async function refuseIfChanging(ctx: Context, name: string): Promise<void> {
