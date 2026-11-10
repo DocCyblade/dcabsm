@@ -41,6 +41,8 @@ export interface HarnessOptions {
   arch?: string;
   /** How far each command run moves the fake clock, so a Verification wait can time out. */
   clockStepMs?: number;
+  /** Where the fake clock starts. Default: 2026-11-09T12:00:00Z. */
+  startAt?: Date;
   env?: Record<string, string | undefined>;
   /** The contents of /etc/os-release. Default: Debian 13. Null: no file. */
   osRelease?: string | null;
@@ -108,7 +110,7 @@ export async function harness(opts: HarnessOptions = {}): Promise<Harness> {
       uid: opts.uid ?? 0,
       arch: opts.arch ?? "x64",
       env: opts.env ?? {},
-      now: () => new Date(Date.parse("2026-11-09T12:00:00Z") + elapsedMs),
+      now: () => new Date((opts.startAt ?? new Date("2026-11-09T12:00:00Z")).getTime() + elapsedMs),
     },
     out,
     err,

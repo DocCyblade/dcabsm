@@ -13,6 +13,7 @@ import {
   latestStable,
   planRelease,
 } from "../release/install.ts";
+import { validateCertificateFiles, type CertificateInfo } from "../cert.ts";
 import { configJson, vhostConf } from "./files.ts";
 import {
   accountOf,
@@ -101,93 +102,24 @@ async function freePort(ctx: Context): Promise<number> {
   return port;
 }
 
-async function chooseCertificate(ctx: Context, hostname: string, selfSigned: boolean) {
-  if (selfSigned) return;
-  if (!ctx.io.interactive) {
-    throw refusal(
-      "No terminal to ask for a certificate on.",
-      "Re-run with --cert <f> --key <f>, or --self-signed.",
-    );
-  }
-  ctx.io.out(`No certificate given for ${hostname}. Every Instance must have one.`);
-  const answer = (
-    await ctx.io.ask("  [1] self-signed now  [2] cancel (re-run with --cert/--key): ")
-  ).trim();
-  if (answer !== "1") throw new Cancelled();
+/** Where an Instance's certificate comes from. */
+type CertSource = { kind: "self-signed" } | { kind: "given"; info: CertificateInfo };
+
+/** The certificate files named on the command line. */
+interface CertFiles {
+  cert: string;
+  key: string;
 }
 
-/** The newest installed Release, or `--release`; installs it first if it is missing. */
-async function resolveRelease(ctx: Context, wanted: string | undefined): Promise<string> {
-  const installed = await installedReleases(ctx);
-  const version = wanted ?? installed.at(-1) ?? (await latestStable(ctx));
-  if (!installed.includes(version)) {
-    await installRelease(ctx, await planRelease(ctx, version));
-  }
-  return version;
+interface CreateRequest {
+  name: string;
+  hostname: string;
+  release: string | undefined;
+  /** What was asked for; `undefined` means ask (spec 4.6 step 3). */
+  cert: CertFiles | "self-signed" | undefined;
 }
 
-/** Creates the files, directories and certificate of one Instance, with spec 2.2 ownership. */
-async function layOutInstanceFiles(
-  ctx: Context,
-  name: string,
-  record: InstanceRecord,
-  release: string,
-) {
-  const dir = instanceDir(ctx, name);
-  const account = accountOf(name);
-  const rootGroup = `root:${account}`;
-  const owned = `${account}:${account}`;
-  const ipv6 = await hostHasIpv6(ctx);
-
-  const dirs: Array<[string, number, string]> = [
-    [dir, 0o750, rootGroup],
-    [join(dir, "config"), 0o750, rootGroup],
-    [join(dir, "data"), 0o700, owned],
-    [join(dir, "server-files"), 0o700, owned],
-    [join(dir, "user-files"), 0o700, owned],
-    [join(dir, "nginx"), 0o700, "root:root"],
-  ];
-  for (const [path, mode, owner] of dirs) {
-    await ensureDir(path, mode);
-    await run(ctx, "chown", [owner, path]);
-  }
-  await symlink(join(ctx.paths.releases, release), join(dir, "release"));
-
-  const config = join(dir, "config", "config.json");
-  await writeFileAtomic(
-    join(dir, "config", "instance.json"),
-    `${JSON.stringify(record, null, 2)}\n`,
-    0o600,
-  );
-  await writeFileAtomic(config, configJson(name, record), 0o640);
-  await run(ctx, "chown", [rootGroup, config]);
-
-  const nginx = join(dir, "nginx");
-  await run(ctx, "openssl", [
-    "req",
-    "-x509",
-    "-newkey",
-    "ec",
-    "-pkeyopt",
-    "ec_paramgen_curve:P-256",
-    "-nodes",
-    "-days",
-    String(SELF_SIGNED_DAYS),
-    "-subj",
-    `/CN=${record.hostname}`,
-    "-addext",
-    `subjectAltName=DNS:${record.hostname}`,
-    "-keyout",
-    join(nginx, "key.pem"),
-    "-out",
-    join(nginx, "cert.pem"),
-  ]);
-  for (const file of ["key.pem", "cert.pem"]) await chmod(join(nginx, file), 0o600);
-  await writeFileAtomic(join(nginx, "vhost.conf"), vhostConf(name, record, ipv6), 0o600);
-}
-
-/** `instance create <name> --hostname <host> (--cert <f> --key <f> | --self-signed) [--release <v>]` */
-export async function instanceCreate({ ctx, args }: Invocation): Promise<void> {
+function parseCreate(args: string[]): CreateRequest {
   const { values, positionals } = parseCommand(args, {
     hostname: { type: "string" },
     cert: { type: "string" },
@@ -200,13 +132,23 @@ export async function instanceCreate({ ctx, args }: Invocation): Promise<void> {
   const name = positionals[0]!;
   checkName(name);
   if (values.hostname === undefined) throw refusal("--hostname is required.", usage);
-  const hostname = values.hostname;
-  checkHostname(hostname);
+  checkHostname(values.hostname);
 
-  if (values.cert !== undefined || values.key !== undefined) {
-    if (values["self-signed"]) throw refusal("Use --self-signed or --cert/--key, not both.");
-    throw refusal("--cert and --key are not built yet.", "Use --self-signed for now.");
+  const given = values.cert !== undefined || values.key !== undefined;
+  if (given && values["self-signed"]) throw refusal("Use --self-signed or --cert/--key, not both.");
+  if (given && (values.cert === undefined || values.key === undefined)) {
+    throw refusal("--cert and --key go together.", "Give both: --cert <file> --key <file>");
   }
+  const cert: CreateRequest["cert"] = given
+    ? { cert: values.cert!, key: values.key! }
+    : values["self-signed"]
+      ? "self-signed"
+      : undefined;
+  return { name, hostname: values.hostname, release: values.release, cert };
+}
+
+/** Refuses an existing name or a hostname already in use, before anything changes. */
+async function checkFree(ctx: Context, name: string, hostname: string): Promise<void> {
   if (await exists(instanceDir(ctx, name))) {
     throw refusal(
       `An Instance named ${name} already exists.`,
@@ -215,16 +157,143 @@ export async function instanceCreate({ ctx, args }: Invocation): Promise<void> {
   }
   const inUse = await hostnameInUse(ctx, hostname);
   if (inUse) throw refusal(inUse);
-  await chooseCertificate(ctx, hostname, values["self-signed"] === true);
+}
 
-  ctx.io.out(`Create ${name}`);
-  const release = await resolveRelease(ctx, values.release);
+/** Validates a given certificate, or asks on a terminal, or refuses (spec 4.6 step 3, 5.5). */
+async function chooseCertificate(ctx: Context, req: CreateRequest): Promise<CertSource> {
+  if (req.cert === "self-signed") return { kind: "self-signed" };
+  if (req.cert) {
+    const info = await validateCertificateFiles(ctx, { ...req.cert, hostname: req.hostname });
+    return { kind: "given", info };
+  }
+  if (!ctx.io.interactive) {
+    throw refusal(
+      "No terminal to ask for a certificate on.",
+      "Re-run with --cert <f> --key <f>, or --self-signed.",
+    );
+  }
+  ctx.io.out(`No certificate given for ${req.hostname}. Every Instance must have one.`);
+  const answer = (
+    await ctx.io.ask("  [1] self-signed now  [2] cancel (re-run with --cert/--key): ")
+  ).trim();
+  if (answer !== "1") throw new Cancelled();
+  return { kind: "self-signed" };
+}
 
-  const record: InstanceRecord = {
-    port: await freePort(ctx),
-    hostname,
-    scheduledBackups: true,
-  };
+/** The newest installed Release, or `--release`; installs it first if it is missing. */
+async function resolveRelease(ctx: Context, wanted: string | undefined): Promise<string> {
+  const installed = await installedReleases(ctx);
+  const version = wanted ?? installed.at(-1) ?? (await latestStable(ctx));
+  if (!installed.includes(version)) {
+    await installRelease(ctx, await planRelease(ctx, version));
+  }
+  return version;
+}
+
+interface DirSpec {
+  path: string;
+  mode: number;
+  /** `user:group` as `chown` takes it. */
+  owner: string;
+}
+
+/** Every Instance directory, with spec 2.2 ownership, before the first start. */
+async function makeDirectories(ctx: Context, name: string): Promise<void> {
+  const dir = instanceDir(ctx, name);
+  const account = accountOf(name);
+  const rootGroup = `root:${account}`;
+  const owned = `${account}:${account}`;
+  const dirs: DirSpec[] = [
+    { path: dir, mode: 0o750, owner: rootGroup },
+    { path: join(dir, "config"), mode: 0o750, owner: rootGroup },
+    { path: join(dir, "data"), mode: 0o700, owner: owned },
+    { path: join(dir, "server-files"), mode: 0o700, owner: owned },
+    { path: join(dir, "user-files"), mode: 0o700, owner: owned },
+    { path: join(dir, "nginx"), mode: 0o700, owner: "root:root" },
+  ];
+  for (const { path, mode, owner } of dirs) {
+    await ensureDir(path, mode);
+    await run(ctx, "chown", [owner, path]);
+  }
+}
+
+async function writeConfigFiles(
+  ctx: Context,
+  name: string,
+  record: InstanceRecord,
+  release: string,
+): Promise<void> {
+  const dir = instanceDir(ctx, name);
+  await symlink(join(ctx.paths.releases, release), join(dir, "release"));
+  const config = join(dir, "config", "config.json");
+  await writeFileAtomic(
+    join(dir, "config", "instance.json"),
+    `${JSON.stringify(record, null, 2)}\n`,
+    0o600,
+  );
+  await writeFileAtomic(config, configJson(name, record), 0o640);
+  await run(ctx, "chown", [`root:${accountOf(name)}`, config]);
+}
+
+/** Puts `cert.pem` and `key.pem` in the Instance's `nginx/`, root-only (spec 5.5). */
+async function writeCertificate(
+  ctx: Context,
+  name: string,
+  hostname: string,
+  source: CertSource,
+): Promise<void> {
+  const nginx = join(instanceDir(ctx, name), "nginx");
+  if (source.kind === "given") {
+    await writeFileAtomic(join(nginx, "cert.pem"), source.info.certPem, 0o600);
+    await writeFileAtomic(join(nginx, "key.pem"), source.info.keyPem, 0o600);
+    return;
+  }
+  await run(ctx, "openssl", [
+    "req",
+    "-x509",
+    "-newkey",
+    "ec",
+    "-pkeyopt",
+    "ec_paramgen_curve:P-256",
+    "-nodes",
+    "-days",
+    String(SELF_SIGNED_DAYS),
+    "-subj",
+    `/CN=${hostname}`,
+    "-addext",
+    `subjectAltName=DNS:${hostname}`,
+    "-keyout",
+    join(nginx, "key.pem"),
+    "-out",
+    join(nginx, "cert.pem"),
+  ]);
+  for (const file of ["key.pem", "cert.pem"]) await chmod(join(nginx, file), 0o600);
+}
+
+function reportCertificate(ctx: Context, hostname: string, source: CertSource): void {
+  if (source.kind === "given") {
+    step(ctx, "done", `Certificate for ${hostname}, ${source.info.daysLeft} days left`);
+    for (const warning of source.info.warnings) step(ctx, "warn", warning);
+    return;
+  }
+  step(ctx, "done", `Certificate for ${hostname}, ${SELF_SIGNED_DAYS} days left (self-signed)`);
+  ctx.io.out(
+    "  Self-signed: browsers warn on each device, and may warn again later. Actual works after you proceed,",
+  );
+  ctx.io.out(
+    "  but offline use and installing as an app need a certificate the device trusts. Bring one later: sudo dcabsm cert update <name> --cert <file> --key <file>",
+  );
+}
+
+/** Steps 5 and 6 of spec 4.6: account, files, `nginx -t` and reload. Nothing of it stays on failure. */
+async function createFiles(
+  ctx: Context,
+  req: CreateRequest,
+  source: CertSource,
+  record: InstanceRecord,
+  release: string,
+): Promise<void> {
+  const { name, hostname } = req;
   const account = accountOf(name);
   await run(ctx, "useradd", [
     "--system",
@@ -238,17 +307,17 @@ export async function instanceCreate({ ctx, args }: Invocation): Promise<void> {
   ]);
   step(ctx, "done", `Account ${account}`);
 
-  const unit = `dcabsm@${name}`;
   try {
-    await layOutInstanceFiles(ctx, name, record, release);
+    await makeDirectories(ctx, name);
+    await writeConfigFiles(ctx, name, record, release);
+    await writeCertificate(ctx, name, hostname, source);
+    await writeFileAtomic(
+      join(instanceDir(ctx, name), "nginx", "vhost.conf"),
+      vhostConf(name, record, await hostHasIpv6(ctx)),
+      0o600,
+    );
     step(ctx, "done", `Instance on Release ${release}, port ${record.port}`);
-    step(ctx, "done", `Certificate for ${hostname}, ${SELF_SIGNED_DAYS} days left (self-signed)`);
-    ctx.io.out(
-      "  Self-signed: browsers warn on each device, and may warn again later. Actual works after you proceed,",
-    );
-    ctx.io.out(
-      "  but offline use and installing as an app need a certificate the device trusts. Bring one later: sudo dcabsm cert update <name> --cert <file> --key <file>",
-    );
+    reportCertificate(ctx, hostname, source);
 
     const failure = await nginxTestFailure(ctx);
     if (failure) throw new CliError(`nginx -t failed: ${failure}`);
@@ -262,8 +331,16 @@ export async function instanceCreate({ ctx, args }: Invocation): Promise<void> {
       ? err
       : new CliError(`Could not create ${name}: ${errorMessage(err)}`);
   }
+}
 
-  // Nginx is fine by now, so a failed start keeps the Instance for `instance logs` (spec 4.6).
+/** Step 7 of spec 4.6. Nginx is fine by now, so a failed start keeps the Instance for `instance logs`. */
+async function startAndVerify(
+  ctx: Context,
+  name: string,
+  record: InstanceRecord,
+  release: string,
+): Promise<void> {
+  const unit = `dcabsm@${name}`;
   let seconds: number;
   try {
     await systemctl(ctx, "start", unit);
@@ -280,10 +357,27 @@ export async function instanceCreate({ ctx, args }: Invocation): Promise<void> {
     );
   }
   step(ctx, "done", `Started and verified: /health UP, /info ${release} (${seconds}s)`);
+}
+
+/** `instance create <name> --hostname <host> (--cert <f> --key <f> | --self-signed) [--release <v>]` */
+export async function instanceCreate({ ctx, args }: Invocation): Promise<void> {
+  const req = parseCreate(args);
+  await checkFree(ctx, req.name, req.hostname);
+  const source = await chooseCertificate(ctx, req);
+
+  ctx.io.out(`Create ${req.name}`);
+  const release = await resolveRelease(ctx, req.release);
+  const record: InstanceRecord = {
+    port: await freePort(ctx),
+    hostname: req.hostname,
+    scheduledBackups: true,
+  };
+  await createFiles(ctx, req, source, record, release);
+  await startAndVerify(ctx, req.name, record, release);
 
   ctx.io.out("");
   ctx.io.out(
-    `Open https://${hostname} now to set the server password: until it is set, whoever opens it first sets it.`,
+    `Open https://${req.hostname} now to set the server password: until it is set, whoever opens it first sets it.`,
   );
   ctx.io.out("Scheduled backups are on.");
 }

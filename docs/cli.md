@@ -385,7 +385,7 @@ Scheduled backups are on.
     [1] self-signed now  [2] cancel (re-run with --cert/--key):
   ```
 
-  A certificate that is expired, doesn't cover the hostname or doesn't match the key is refused with nothing changed (spec 5.6).
+  A certificate that is expired, doesn't cover the hostname or doesn't match the key is refused with nothing changed (spec 5.6), and so is a passphrase-protected key. A chain the system CAs don't trust only prints a warning. `--cert` and `--key` go together. The full chain and the key are copied into the Instance's `nginx/`, root-only.
 - **Self-signed** prints:
 
   ```
