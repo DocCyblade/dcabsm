@@ -7,7 +7,7 @@ import { installedReleases, releaseNodeMajor } from "./install.ts";
 import { linkedPatch } from "./node.ts";
 
 /** Instance names by the Release their `release` symlink points to. Dot-prefixed names are ignored. */
-async function instancesByRelease(ctx: Context): Promise<Map<string, string[]>> {
+export async function instancesByRelease(ctx: Context): Promise<Map<string, string[]>> {
   const used = new Map<string, string[]>();
   let names: string[];
   try {

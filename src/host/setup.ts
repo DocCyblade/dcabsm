@@ -23,6 +23,7 @@ import {
   readHostConfig,
   writeHostConfig,
 } from "./config.ts";
+import { turnkeyPlan } from "./turnkey.ts";
 import { isInstalled, nginxIsActive, nginxTestFailure, nginxUp, systemctl } from "./system.ts";
 import {
   hostOwnedFiles,
@@ -118,6 +119,8 @@ export async function hostSetup({ ctx, args }: Invocation): Promise<void> {
   );
   const ownedWork = pending(inspected);
 
+  const turnkey = await turnkeyPlan(ctx);
+
   // Step 8 passes once any Release loads, so a re-run never pulls a newer one (spec 10.2).
   const releasePlan = (await anyReleaseLoads(ctx))
     ? undefined
@@ -128,7 +131,8 @@ export async function hostSetup({ ctx, args }: Invocation): Promise<void> {
     missingDirs.length === 0 &&
     !needConfig &&
     ownedWork.length === 0 &&
-    !releasePlan
+    !releasePlan &&
+    !turnkey
   ) {
     // Nothing else to do, but Nginx must still be up and enabled (spec 10.2 step 7).
     if (await keepNginxUp(ctx, flags.yes)) return;
@@ -142,6 +146,7 @@ export async function hostSetup({ ctx, args }: Invocation): Promise<void> {
 
   ctx.io.out("");
   ctx.io.out("Plan");
+  if (turnkey) step(ctx, "info", turnkey.line);
   if (missingPackages.length > 0)
     step(ctx, "info", `Install ${missingPackages.join(" and ")} with apt`);
   if (missingDirs.length > 0) step(ctx, "info", "Create /etc/dcabsm and /srv/dcabsm");
@@ -155,6 +160,12 @@ export async function hostSetup({ ctx, args }: Invocation): Promise<void> {
   if (releasePlan)
     step(ctx, "info", `Install Release ${releasePlan.version} with its Node runtime`);
   await confirmOrCancel(ctx, "Go ahead?", { yes: flags.yes });
+
+  if (turnkey) {
+    await turnkey.disable();
+    step(ctx, "done", "TurnKey: disabled what clashes with DCABSM (nothing deleted)");
+    await logChange(ctx, "host setup", "disabled TurnKey pieces that clash with DCABSM");
+  }
 
   if (missingPackages.length > 0) {
     const res = await ctx.runner.run("env", [

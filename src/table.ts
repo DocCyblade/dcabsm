@@ -8,11 +8,13 @@ import { backupList } from "./backup/list.ts";
 import { instanceCreate } from "./instance/create.ts";
 import { instanceLogs, instanceRestart, instanceStart, instanceStop } from "./instance/controls.ts";
 import { instanceList, instanceShow } from "./instance/list.ts";
+import { instanceResetPassword } from "./instance/reset-password.ts";
 import { instanceSet, instanceSettings, instanceUnset } from "./instance/settings.ts";
 import { releaseList } from "./release/list.ts";
 import { selfMigrate } from "./self/migrations.ts";
 import { selfRefresh } from "./self/refresh.ts";
 import { selfUpdate } from "./self/update.ts";
+import { releasePrune } from "./release/prune.ts";
 import { versionLine } from "./version.ts";
 
 export interface Invocation {
@@ -152,6 +154,7 @@ export const table: Noun[] = [
         usage: "reset-password <name>",
         summary: "Reset the server password in Actual's own tool",
         changes: true,
+        run: instanceResetPassword,
       },
       {
         name: "settings",
@@ -258,6 +261,7 @@ export const table: Noun[] = [
         usage: "prune [--yes]",
         summary: "Remove Releases no Instance uses, and unused Node runtimes",
         changes: true,
+        run: releasePrune,
       },
       {
         name: "update-node",
