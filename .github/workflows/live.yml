@@ -1,0 +1,36 @@
+name: Live sources
+
+# Spec 13.3: once a week, install the newest Actual Release and Node from the live sources, so a new
+# Release that breaks install, /health, /info or a migration shows up before a user hits it.
+on:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live:
+    name: live (${{ matrix.os }}, ${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [debian-13, ubuntu-24.04, ubuntu-26.04]
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+        include:
+          - { runner: ubuntu-24.04, arch: amd64 }
+          - { runner: ubuntu-24.04-arm, arch: arm64 }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run package
+      - name: Run the journey against the live sources
+        run: test/container/run.sh ${{ matrix.os }} --live

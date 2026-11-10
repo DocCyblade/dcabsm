@@ -63,6 +63,37 @@ jobs:
             install.sh
           if-no-files-found: error
 
+  # Spec 13.2, 13.3: the real dcabsm as root in a privileged systemd container, on every supported OS,
+  # on native amd64 and arm64 runners. The CI-built tarball is what gets installed.
+  containers:
+    name: containers (${{ matrix.os }}, ${{ matrix.arch }})
+    needs: tarballs
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [debian-13, ubuntu-24.04, ubuntu-26.04]
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+        include:
+          - { runner: ubuntu-24.04, arch: amd64 }
+          - { runner: ubuntu-24.04-arm, arch: arm64 }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+      - uses: actions/download-artifact@v7
+        with:
+          name: release-files
+      # The pinned Releases, their npm cache and Node are fetched once per change to the pins.
+      - uses: actions/cache@v5
+        with:
+          path: .cache/container-pins/${{ matrix.arch }}
+          key: container-pins-${{ matrix.arch }}-${{ hashFiles('test/container/pins.json', '.node-version') }}
+      - name: Run the journey
+        run: test/container/run.sh ${{ matrix.os }}
+
   release-guard:
     name: release guard
     if: startsWith(github.ref, 'refs/tags/v')
