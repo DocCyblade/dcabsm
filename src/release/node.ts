@@ -63,7 +63,7 @@ export async function linkedPatch(ctx: Context, major: number): Promise<string |
   }
 }
 
-async function pointMajorAt(ctx: Context, major: number, patch: string): Promise<void> {
+export async function pointMajorAt(ctx: Context, major: number, patch: string): Promise<void> {
   const link = join(ctx.paths.node, String(major));
   const current = await linkedPatch(ctx, major);
   if (current !== undefined && compareText(current, patch) >= 0) return;
@@ -96,7 +96,7 @@ export async function ensureNode(ctx: Context, choice: NodeChoice): Promise<stri
   return (await linkedPatch(ctx, choice.major)) ?? patch;
 }
 
-async function installPatch(ctx: Context, patch: string): Promise<void> {
+export async function installPatch(ctx: Context, patch: string): Promise<void> {
   const base = `${DIST}/v${patch}`;
   const file = `node-v${patch}-linux-${ctx.arch}.tar.xz`;
   const work = join(ctx.paths.node, `.installing-${patch}`);

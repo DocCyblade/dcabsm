@@ -10,8 +10,8 @@ import type { Invocation } from "../table.ts";
 import { VERSION } from "../version.ts";
 import { readHostConfig } from "./config.ts";
 
-const NODE_INDEX = "https://nodejs.org/dist/index.json";
-const NODE_SCHEDULE = "https://raw.githubusercontent.com/nodejs/Release/main/schedule.json";
+export const NODE_INDEX = "https://nodejs.org/dist/index.json";
+export const NODE_SCHEDULE = "https://raw.githubusercontent.com/nodejs/Release/main/schedule.json";
 export const DCABSM_LATEST = "https://api.github.com/repos/DocCyblade/dcabsm/releases/latest";
 
 /** The last `host check-updates` result, kept at `paths.updateCheck` (spec 2.1). */
@@ -25,7 +25,7 @@ interface Stored {
   node: Record<string, { latest: string; eol?: string }>;
 }
 
-async function fetchJson(ctx: Context, url: string, what: string): Promise<unknown> {
+export async function fetchJson(ctx: Context, url: string, what: string): Promise<unknown> {
   let res;
   try {
     res = await ctx.fetcher.fetch(url);
@@ -37,7 +37,7 @@ async function fetchJson(ctx: Context, url: string, what: string): Promise<unkno
 }
 
 /** The installed Node majors and the patch each `node/<major>` link points to. */
-async function installedNode(ctx: Context): Promise<Map<number, string>> {
+export async function installedNode(ctx: Context): Promise<Map<number, string>> {
   const found = new Map<number, string>();
   let names: string[];
   try {
@@ -63,7 +63,7 @@ async function readStored(ctx: Context): Promise<Stored | undefined> {
 const newest = (versions: string[]): string | undefined => versions.sort(compareText).reverse()[0];
 
 /** Whether `latest` is newer than `have`. A dev build such as `0.0.0-dev` compares by its number. */
-function isNewer(latest: string, have: string | undefined): boolean {
+export function isNewer(latest: string, have: string | undefined): boolean {
   if (have === undefined) return false;
   const core = /^\d+\.\d+\.\d+/.exec(have)?.[0] ?? have;
   return compareText(latest, core) > 0;
