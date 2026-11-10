@@ -196,6 +196,21 @@ expect_ok dcabsm release update-node --yes
 wait_for 30 up alpha.test
 wait_for 30 up beta.test
 
+step "Certificates: test, then update beta to a new one"
+expect_ok dcabsm cert test alpha
+expect_in "alpha.test"
+openssl req -x509 -newkey rsa:2048 -nodes -days 3 -subj "/CN=beta.test" \
+  -addext "subjectAltName=DNS:beta.test" -keyout /root/beta2.key -out /root/beta2.crt 2> /dev/null
+expect_ok dcabsm cert update beta --cert /root/beta2.crt --key /root/beta2.key
+curl -sf --max-time 5 --cacert /root/beta2.crt --resolve beta.test:443:127.0.0.1 https://beta.test/health | grep -q UP ||
+  fail "beta does not serve the updated certificate"
+# A certificate for another hostname is refused, and the one in place keeps serving.
+expect_refusal "" dcabsm cert update beta --cert /root/beta.crt --key /root/beta2.key
+curl -sf --max-time 5 --cacert /root/beta2.crt --resolve beta.test:443:127.0.0.1 https://beta.test/health | grep -q UP ||
+  fail "a refused update changed what beta serves"
+expect_ok dcabsm instance list
+expect_in "CERT"
+
 step "Reset-password refuses without a terminal"
 expect_refusal "needs a terminal" dcabsm instance reset-password alpha
 
