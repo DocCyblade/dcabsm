@@ -21,7 +21,12 @@ export interface FakeNet {
   /** Signed DCABSM versions on GitHub: the layout each expects, and the files its tarball holds besides `bin/dcabsm`. */
   dcabsm: Record<
     string,
-    { layout: number; files?: Record<string, string>; migrateFails?: boolean }
+    {
+      layout: number;
+      files?: Record<string, string>;
+      migrateFails?: boolean;
+      refreshFails?: boolean;
+    }
   >;
   /** Make the downloaded DCABSM tarball differ from the one SHA256SUMS lists. */
   dcabsmBadChecksum: boolean;
@@ -112,7 +117,9 @@ function fakeDcabsm(net: FakeNet, command: string, args: string[]): RunResult {
     writeFileSync(etc, JSON.stringify({ ...config, layout: spec.layout, layoutSince: version }));
     return ok();
   }
-  if (args.join(" ") === "self refresh") return ok(net.refreshOutput);
+  if (args.join(" ") === "self refresh") {
+    return spec.refreshFails ? fail("error: refresh broke: nginx on fire") : ok(net.refreshOutput);
+  }
   return fail("unexpected");
 }
 

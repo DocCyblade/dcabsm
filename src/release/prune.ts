@@ -1,8 +1,8 @@
-import { readFile, readdir, readlink, rm, unlink } from "node:fs/promises";
+import { readdir, readlink, rm, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { parseFlags } from "../args.ts";
 import type { Context } from "../context.ts";
-import { makeWritable } from "../fsutil.ts";
+import { makeWritable, readTextOr } from "../fsutil.ts";
 import { instanceNames, changingMarker } from "../instance/record.ts";
 import { logChange } from "../log.ts";
 import { step } from "../output.ts";
@@ -15,12 +15,8 @@ import { instancesByRelease } from "./list.ts";
 async function namedByMarkers(ctx: Context, releases: string[]): Promise<Set<string>> {
   const named = new Set<string>();
   for (const name of await instanceNames(ctx)) {
-    let text: string;
-    try {
-      text = await readFile(changingMarker(ctx, name), "utf8");
-    } catch {
-      continue;
-    }
+    const text = await readTextOr(changingMarker(ctx, name));
+    if (text === undefined) continue;
     for (const version of releases) {
       // A whole version, not the front of a longer one such as 26.1.0 in 26.10.0.
       if (new RegExp(`(?<![\\d.])${version.replaceAll(".", "\\.")}(?![\\d]|\\.\\d)`).test(text)) {

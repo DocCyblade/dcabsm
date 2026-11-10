@@ -46,8 +46,8 @@ describe("instance reset-password", () => {
   it("prints the hint, then hands the terminal to Actual's tool as the Instance account", async () => {
     const handed = await start();
     expect(await run(["instance", "reset-password", "test"], h.ctx)).toBe(0);
-    expect(h.out[0]).toContain("DCABSM never sees the password");
-    expect(h.out[1]).toBe("If you paste a password, press Enter separately.");
+    expect(h.out[0]).toBe("If you paste a password, press Enter separately.");
+    expect(h.out[1]).toContain("DCABSM never sees the password");
     expect(handed).toHaveLength(1);
     const { command, args } = handed[0]!;
     expect(command).toBe("runuser");

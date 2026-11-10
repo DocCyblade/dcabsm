@@ -2,27 +2,14 @@ import { createHash } from "node:crypto";
 import { mkdir, readlink, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Context } from "../context.ts";
-import { CliError, errorMessage } from "../errors.ts";
+import { CliError } from "../errors.ts";
+import { fetchOk } from "../fetchutil.ts";
 import { exists } from "../fsutil.ts";
 import { step } from "../output.ts";
 import { NODE_CEILING } from "./constants.ts";
 import { compareText, parseVersion, satisfies } from "./semver.ts";
 
 const DIST = "https://nodejs.org/dist";
-
-export async function fetchOk(ctx: Context, url: string): Promise<Uint8Array> {
-  let res;
-  try {
-    res = await ctx.fetcher.fetch(url);
-  } catch (err) {
-    throw new CliError(
-      `Could not reach ${new URL(url).host}: ${errorMessage(err)}`,
-      "Check the network, then run again.",
-    );
-  }
-  if (res.status !== 200) throw new CliError(`${url} answered ${res.status}.`);
-  return res.body;
-}
 
 /** Newest patch of each LTS major no newer than the ceiling, from nodejs.org's `index.json`. */
 async function ltsPatches(ctx: Context): Promise<Map<number, string>> {

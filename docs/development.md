@@ -29,7 +29,7 @@ DCABSM is TypeScript on Node 24, bundled by esbuild into one JS file. It has no 
 - `src/cert.ts`: reads and checks a bring-your-own certificate and key (spec 5.5).
 - `src/backup/`: `archive.ts` holds archive names, the backup directory and manifest reading, `create.ts` is `backup create` and `takeBackup`, and `list.ts` is `backup list`.
 - `src/columns.ts`: the one column formatter the list and summary tables share.
-- `src/args.ts`, `src/fsutil.ts`, `src/output.ts`: flag parsing, file and directory helpers, and the step marks.
+- `src/args.ts`, `src/fsutil.ts`, `src/fetchutil.ts`, `src/output.ts`: flag parsing, file and directory helpers (`readTextOr` reads a file or gives undefined), the checked fetch, and the step marks.
 - `src/paths.ts`: every path hangs off one root. `DCABSM_ROOT` moves it; the default is `/`. In the shipped completion script it is a test seam only: it lets the real-bash tests run under a temporary root.
 - `src/prompt.ts`, `src/lock.ts`, `src/log.ts`: the helpers every command shares.
 - `test/container/`: the container layer (spec 13.2, 13.3), CI only in practice; see below.

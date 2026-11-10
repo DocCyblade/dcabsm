@@ -5,14 +5,15 @@ import { lockHolder } from "../lock.ts";
 import { logChange } from "../log.ts";
 import { step } from "../output.ts";
 import { noTerminal } from "../prompt.ts";
-import { hostChecks, type CheckResult, type Refusal, type Severity } from "./checks.ts";
+import { hostChecks, hostFacts, type CheckResult, type Refusal, type Severity } from "./checks.ts";
 
 const MARK = { note: "info", warn: "warn", fail: "failed" } as const;
 const RANK: Record<Severity, number> = { note: 0, warn: 1, fail: 2 };
 
 async function runAll(ctx: Context): Promise<CheckResult[]> {
   const results: CheckResult[] = [];
-  for (const check of hostChecks) results.push(...(await check.run(ctx)));
+  const facts = hostFacts(ctx);
+  for (const check of hostChecks) results.push(...(await check.run(ctx, facts)));
   return results;
 }
 

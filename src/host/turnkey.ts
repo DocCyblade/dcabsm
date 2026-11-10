@@ -1,6 +1,7 @@
-import { chmod, lstat, readFile, rm, stat } from "node:fs/promises";
+import { chmod, lstat, rm, stat } from "node:fs/promises";
 import type { Context } from "../context.ts";
-import type { Check, CheckResult } from "./checks.ts";
+import { readTextOr } from "../fsutil.ts";
+import type { Check, CheckResult, HostFacts } from "./checks.ts";
 import { isInstalled, systemctl } from "./system.ts";
 
 /** TurnKey Linux Hosts (spec 10.7): detection, first boot and the pieces that clash with DCABSM. */
@@ -22,12 +23,9 @@ export const UNSUPPORTED_APPLIANCE =
  * appliance against the matching `turnkey-<name>` package (spec 10.7).
  */
 export async function detectTurnkey(ctx: Context): Promise<TurnkeyState> {
-  let text: string;
-  try {
-    text = (await readFile(ctx.paths.under("etc/turnkey_version"), "utf8")).trim();
-  } catch {
-    return { kind: "none" };
-  }
+  const raw = await readTextOr(ctx.paths.under("etc/turnkey_version"));
+  if (raw === undefined) return { kind: "none" };
+  const text = raw.trim();
   const match = /^turnkey-([a-z0-9-]+)-(\d+\.\d+)-[a-z0-9]+-[a-z0-9]+$/.exec(text);
   if (!match) return { kind: "unsupported", found: text || "an empty /etc/turnkey_version" };
   const [, name, version] = match as unknown as [string, string, string];
@@ -49,20 +47,16 @@ export async function detectTurnkey(ctx: Context): Promise<TurnkeyState> {
  * first login. Needs confirming on a real TurnKey VM (spec 14).
  */
 export async function firstBootFinished(ctx: Context): Promise<boolean> {
-  let defaults: string;
-  try {
-    defaults = await readFile(ctx.paths.under("etc/default/inithooks"), "utf8");
-  } catch {
-    return false;
-  }
+  const defaults = await readTextOr(ctx.paths.under("etc/default/inithooks"));
+  if (defaults === undefined) return false;
   const flag = /^\s*RUN_FIRSTBOOT=["']?(\w+)/m.exec(defaults)?.[1];
   if (flag?.toLowerCase() !== "false") return false;
   const fence = await ctx.runner.run("systemctl", ["is-active", "--quiet", "turnkey-init-fence"]);
   return fence.code !== 0;
 }
 
-async function turnkeyCheck(ctx: Context): Promise<CheckResult[]> {
-  const state = await detectTurnkey(ctx);
+async function turnkeyCheck(ctx: Context, facts: HostFacts): Promise<CheckResult[]> {
+  const state = await facts.turnkey();
   if (state.kind === "none") return [];
   if (state.kind === "unsupported") {
     return [
@@ -94,7 +88,7 @@ interface Piece {
   /** For doctor. */
   message: string;
   onlyOn?: Appliance;
-  isBack(ctx: Context): Promise<boolean>;
+  isInPlace(ctx: Context): Promise<boolean>;
   disable(ctx: Context): Promise<void>;
 }
 
@@ -106,7 +100,7 @@ const PIECES: Piece[] = [
     name: "TurnKey's nodejs Nginx site",
     message: "TurnKey's nodejs Nginx site is enabled (/etc/nginx/sites-enabled/nodejs).",
     onlyOn: "nodejs",
-    isBack: async (ctx) =>
+    isInPlace: async (ctx) =>
       lstat(ctx.paths.under(SITE)).then(
         () => true,
         () => false,
@@ -117,7 +111,7 @@ const PIECES: Piece[] = [
     name: "pm2-node.service",
     message: "pm2-node.service is enabled or running.",
     onlyOn: "nodejs",
-    isBack: async (ctx) => {
+    isInPlace: async (ctx) => {
       for (const verb of ["is-enabled", "is-active"])
         if ((await ctx.runner.run("systemctl", [verb, "--quiet", "pm2-node.service"])).code === 0)
           return true;
@@ -129,7 +123,7 @@ const PIECES: Piece[] = [
     name: "confconsole's Let's Encrypt renewal job",
     message:
       "confconsole's Let's Encrypt renewal job is executable (/etc/cron.daily/confconsole-dehydrated); it stops Nginx.",
-    isBack: async (ctx) => {
+    isInPlace: async (ctx) => {
       try {
         return ((await stat(ctx.paths.under(JOB))).mode & 0o111) !== 0;
       } catch {
@@ -144,13 +138,16 @@ const PIECES: Piece[] = [
 ];
 
 /** The pieces that are in place on this appliance; none off TurnKey. */
-async function piecesInPlace(ctx: Context): Promise<Piece[]> {
-  const state = await detectTurnkey(ctx);
+async function piecesInPlace(
+  ctx: Context,
+  detect: () => Promise<TurnkeyState> = () => detectTurnkey(ctx),
+): Promise<Piece[]> {
+  const state = await detect();
   if (state.kind !== "supported") return [];
   const found: Piece[] = [];
   for (const piece of PIECES) {
     if (piece.onlyOn && piece.onlyOn !== state.appliance) continue;
-    if (await piece.isBack(ctx)) found.push(piece);
+    if (await piece.isInPlace(ctx)) found.push(piece);
   }
   return found;
 }
@@ -176,11 +173,11 @@ export async function turnkeyPlan(ctx: Context): Promise<TurnkeyPlan | undefined
   };
 }
 
-async function piecesCheck(ctx: Context): Promise<CheckResult[]> {
-  const state = await detectTurnkey(ctx);
+async function piecesCheck(ctx: Context, facts: HostFacts): Promise<CheckResult[]> {
+  const state = await facts.turnkey();
   if (state.kind !== "supported") return [];
   const results: CheckResult[] = [];
-  const back = await piecesInPlace(ctx);
+  const back = await piecesInPlace(ctx, () => facts.turnkey());
   for (const piece of back) {
     results.push({
       kind: "problem",

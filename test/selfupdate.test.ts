@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, readlink, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, readdir, readlink, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { run } from "../src/cli.ts";
@@ -120,6 +120,43 @@ describe("self update", () => {
     expect(await readlink(h.ctx.paths.binLink)).toBe("/opt/dcabsm/test/bin/dcabsm");
     expect(await names(opt())).toEqual(["1.0.0", "test"]);
     // The lock is released, so the next command can run.
+    expect(await names(join(h.ctx.paths.lock, ".."))).toEqual([]);
+  });
+
+  it("puts /etc/dcabsm back and keeps the old version when the symlink switch fails", async () => {
+    await start();
+    h.net.dcabsmLatest = "2.0.0";
+    const before = await read(h.ctx.paths.hostConfig);
+    const binDir = join(h.ctx.paths.binLink, "..");
+    await chmod(binDir, 0o555);
+    try {
+      expect(await update()).toBe(1);
+    } finally {
+      await chmod(binDir, 0o755);
+    }
+    expect(await read(h.ctx.paths.hostConfig)).toBe(before);
+    expect(await names(h.ctx.paths.etc)).toEqual(["dcabsm.json"]);
+    expect(await readlink(h.ctx.paths.binLink)).toBe("/opt/dcabsm/test/bin/dcabsm");
+    expect(await names(opt())).toEqual(["1.0.0", "test"]);
+    expect(h.err.join("\n")).toContain("/etc/dcabsm was put back as it was");
+    expect(await names(join(h.ctx.paths.lock, ".."))).toEqual([]);
+  });
+
+  it("puts /etc/dcabsm, the symlink and the old version back when the refresh fails after a migration", async () => {
+    await start();
+    h.net.dcabsmLatest = "2.0.0";
+    h.net.dcabsm["2.0.0"] = { layout: 2, refreshFails: true };
+    const before = await read(h.ctx.paths.hostConfig);
+
+    expect(await update()).toBe(1);
+
+    expect(h.err.join("\n")).toContain("nginx on fire");
+    expect(h.err.join("\n")).toContain("/etc/dcabsm was put back as it was");
+    expect(await read(h.ctx.paths.hostConfig)).toBe(before);
+    expect(await names(h.ctx.paths.etc)).toEqual(["dcabsm.json"]);
+    expect(await names(join(h.ctx.paths.etc, ".."))).toEqual(["dcabsm", "os-release"]);
+    expect(await readlink(h.ctx.paths.binLink)).toBe("/opt/dcabsm/test/bin/dcabsm");
+    expect(await names(opt())).toEqual(["1.0.0", "test"]);
     expect(await names(join(h.ctx.paths.lock, ".."))).toEqual([]);
   });
 

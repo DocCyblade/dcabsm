@@ -32,6 +32,8 @@ export interface Verb {
   summary: string;
   /** Routable but left out of `help`. */
   hidden?: boolean;
+  /** Runs on a Host whose stored layout differs from this version's (spec 11.4): Self-update's own steps and `self version`. */
+  passesLayoutGate?: boolean;
   /** Runs without root. Default: root is required. */
   noRoot?: boolean;
   /** Runs before the Host is set up. Default: refuses until `dcabsm.json` exists. */
@@ -280,6 +282,7 @@ export const table: Noun[] = [
         summary: "Update DCABSM itself",
         beforeSetup: true,
         changes: true,
+        passesLayoutGate: true,
         run: selfUpdate,
       },
       {
@@ -288,6 +291,7 @@ export const table: Noun[] = [
         summary: "A step of self update: migrate the stored layout",
         hidden: true,
         beforeSetup: true,
+        passesLayoutGate: true,
         run: selfMigrate,
       },
       {
@@ -304,6 +308,7 @@ export const table: Noun[] = [
         summary: "Print the installed version. dcabsm --version does the same",
         noRoot: true,
         beforeSetup: true,
+        passesLayoutGate: true,
         run: async ({ ctx }) => {
           ctx.io.out(versionLine());
         },

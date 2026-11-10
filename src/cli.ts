@@ -76,8 +76,7 @@ async function dispatch(argv: string[], ctx: Context): Promise<number> {
   }
 
   // Self-update's own steps and `self version` pass a Host on another layout (spec 11.4).
-  const selfStep = noun.name === "self" && ["update", "migrate", "version"].includes(verb.name);
-  if (!selfStep) await checkLayout(ctx);
+  if (!verb.passesLayoutGate) await checkLayout(ctx);
 
   const args = rest;
   if (!(noun.name === "host" && verb.name === "setup"))

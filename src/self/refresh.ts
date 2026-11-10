@@ -1,7 +1,6 @@
-import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Context } from "../context.ts";
-import { writeFileAtomic } from "../fsutil.ts";
+import { readTextOr, writeFileAtomic } from "../fsutil.ts";
 import { DEFAULT_BACKUP_DIR, defaultHostConfig, readHostConfig } from "../host/config.ts";
 import { hostHasIpv6, hostOwnedFiles, inspectOwnedFiles, writeVerified } from "../host/owned.ts";
 import { nginxIsActive, systemctl } from "../host/system.ts";
@@ -12,20 +11,18 @@ import { step } from "../output.ts";
 import type { Invocation } from "../table.ts";
 import { requireUpdateLock } from "./migrations.ts";
 
-async function readOrUndefined(path: string): Promise<string | undefined> {
-  try {
-    return await readFile(path, "utf8");
-  } catch {
-    return undefined;
-  }
+/** A vhost.conf rewritten by a refresh, and what it held before (undefined when it was new). */
+interface VhostChange {
+  path: string;
+  old: string | undefined;
 }
 
 /** Brings the generated files of every Instance up to what this version writes. */
 async function refreshInstances(
   ctx: Context,
-): Promise<{ restart: string[]; vhosts: Array<{ path: string; old: string | undefined }> }> {
+): Promise<{ restart: string[]; vhosts: VhostChange[] }> {
   const restart: string[] = [];
-  const vhosts: Array<{ path: string; old: string | undefined }> = [];
+  const vhosts: VhostChange[] = [];
   const ipv6 = await hostHasIpv6(ctx);
   for (const name of await instanceNames(ctx)) {
     const record = await readRecord(ctx, name);
@@ -37,13 +34,13 @@ async function refreshInstances(
       continue;
     }
     const dir = instanceDir(ctx, name);
-    const oldConfig = await readOrUndefined(join(dir, "config", "config.json"));
+    const oldConfig = await readTextOr(join(dir, "config", "config.json"));
     if (oldConfig !== configJson(name, record, release)) {
       await writeConfigJson(ctx, name, record, release);
       if (oldConfig !== undefined && (await stateOf(ctx, name)) !== "stopped") restart.push(name);
     }
     const vhostPath = join(dir, "nginx", "vhost.conf");
-    const oldVhost = await readOrUndefined(vhostPath);
+    const oldVhost = await readTextOr(vhostPath);
     const vhost = vhostConf(name, record, ipv6);
     if (oldVhost !== vhost) {
       await writeFileAtomic(vhostPath, vhost, 0o600);

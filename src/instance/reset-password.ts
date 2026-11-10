@@ -60,10 +60,10 @@ export async function instanceResetPassword({ ctx, args }: Invocation): Promise<
 
   const account = accountOf(name);
   const dir = logicalDir(name);
+  ctx.io.out("If you paste a password, press Enter separately.");
   ctx.io.out(
     `Handing the terminal to Actual's reset tool as ${account}. DCABSM never sees the password.`,
   );
-  ctx.io.out("If you paste a password, press Enter separately.");
   // `runuser` keeps the caller's environment, so the unit's own variables are set here (spec 4.5).
   const code = await ctx.runner.inherit("runuser", [
     "-u",
