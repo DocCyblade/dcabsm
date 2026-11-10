@@ -28,7 +28,7 @@ Commands are `dcabsm <noun> <verb> [args] [flags]`. There are no flat verbs and 
 | | `host set <key> <value>` | Change one Host setting |
 | `instance` | `instance list` | The overview: every Instance, then the last update check |
 | | `instance show <name>` | One Instance in detail |
-| | `instance create <name> --hostname <host> (--cert <f> --key <f> \| --self-signed) [--release <v>]` | Create an Instance |
+| | `instance create <name> --hostname <host> (--cert <f> --key <f> \| --self-signed) [--release <v>] [--yes]` | Create an Instance |
 | | `instance remove <name> [--confirm <name>]` | Take a final Backup, then delete the Instance |
 | | `instance start\|stop\|restart <names>\|--all` | Start, stop or restart Instances |
 | | `instance logs <name> [-f] [--since <time>]` | Read an Instance's journal |
@@ -370,7 +370,7 @@ It lists the Instance settings the System Admin set, and marks any the current R
 
 ### instance create
 
-`instance create <name> --hostname <host> (--cert <f> --key <f> | --self-signed) [--release <v>]`
+`instance create <name> --hostname <host> (--cert <f> --key <f> | --self-signed) [--release <v>] [--yes]`
 
 ```
 Create shop
@@ -380,13 +380,25 @@ Create shop
   ✓ Nginx: nginx -t passed, reloaded
   ✓ Started and verified: /health UP, /info 26.11.0 (11s)
 
-Open https://shop.example.org now to set the server password: until it is set, whoever opens it first sets it.
+Set the server password now? [Y/n]
+If you paste a password, press Enter separately.
+Handing the terminal to Actual's reset tool as dcabsm-shop. DCABSM never sees the password.
+Enter a new password:
+Confirm the new password:
+Password changed successfully.
+  ✓ Anyone signed in has to sign in again with the new password.
 Scheduled backups are on.
 ```
 
 - **Name.** A lowercase letter first, then lowercase letters, digits or hyphens, 24 characters at most. It can never change. Cloning and then removing the original acts as a rename.
 - **Hostname.** Required. It must be a lowercase DNS name, with no wildcard and no trailing dot, and is refused if another Instance or another Nginx site already uses it.
-- **First visit.** The first person to open the hostname sets the server password. Create the Instance before DNS points at the Host, or set the password straight away.
+- **First password.** On a terminal, after Verification, `create` offers to set the server password through Actual's own tool, the same as `instance reset-password`. With no terminal or with `--yes` it doesn't ask. A new Instance is never OpenID-only, so there is no OpenID check. Declining, or a reset that fails, doesn't fail `create`: it exits as it would without the offer and prints the warning below instead of the password steps.
+- **First visit.** Until the password is set, the first person to open the hostname sets it. Create the Instance before DNS points at the Host, or set the password at once. When the password isn't set, `create` ends with:
+
+  ```
+  Open https://shop.example.org now to set the server password: until it is set, whoever opens it first sets it.
+  ```
+
 - **Certificate.** Every Instance must have one. With neither `--cert`/`--key` nor `--self-signed`, it asks on a terminal and refuses otherwise:
 
   ```

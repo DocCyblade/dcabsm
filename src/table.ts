@@ -107,7 +107,7 @@ export const table: Noun[] = [
       {
         name: "create",
         usage:
-          "create <name> --hostname <host> (--cert <f> --key <f> | --self-signed) [--release <v>]",
+          "create <name> --hostname <host> (--cert <f> --key <f> | --self-signed) [--release <v>] [--yes]",
         summary: "Create an Instance",
         changes: true,
         run: instanceCreate,

@@ -229,6 +229,79 @@ describe("instance create --self-signed", () => {
   });
 });
 
+describe("the offer to set the first password", () => {
+  const WARNING = "Open https://shop.example.org now to set the server password";
+  /** Gives the harness a terminal handover that records what it was handed and exits with `code`. */
+  const handover = (code = 0) => {
+    const handed: string[][] = [];
+    h.ctx.runner.inherit = async (command, args) => {
+      handed.push([command, ...args]);
+      return code;
+    };
+    return handed;
+  };
+  const warned = () => h.out.some((l) => l.startsWith(WARNING));
+
+  it("asks on a terminal and hands it to Actual's reset tool, then drops the warning", async () => {
+    await start({ interactive: true, answers: [""] });
+    const handed = handover();
+    expect(await shop()).toBe(0);
+    expect(h.asked).toEqual(["Set the server password now? [Y/n] "]);
+    expect(handed).toHaveLength(1);
+    expect(handed[0]!.slice(0, 4)).toEqual(["runuser", "-u", "dcabsm-shop", "--"]);
+    expect(handed[0]).toContain("--reset-password");
+    expect(h.out).toContain("If you paste a password, press Enter separately.");
+    expect(warned()).toBe(false);
+  });
+
+  it("keeps the warning and exits 0 when the answer is no", async () => {
+    await start({ interactive: true, answers: ["n"] });
+    const handed = handover();
+    expect(await shop()).toBe(0);
+    expect(handed).toHaveLength(0);
+    expect(warned()).toBe(true);
+  });
+
+  it("keeps the warning and exits 0 when the reset fails", async () => {
+    await start({ interactive: true, answers: ["y"] });
+    handover(1);
+    expect(await shop()).toBe(0);
+    expect(h.out.join("\n")).toContain("The password was not changed");
+    expect(warned()).toBe(true);
+  });
+
+  it("does not ask with --yes", async () => {
+    await start({ interactive: true });
+    const handed = handover();
+    expect(await shop("--yes")).toBe(0);
+    expect(h.asked).toEqual([]);
+    expect(handed).toHaveLength(0);
+    expect(warned()).toBe(true);
+  });
+
+  it("does not ask with no terminal", async () => {
+    await start();
+    const handed = handover();
+    expect(await shop()).toBe(0);
+    expect(handed).toHaveLength(0);
+    expect(warned()).toBe(true);
+  });
+
+  it("does not ask when the start fails", async () => {
+    await start({
+      interactive: true,
+      runner: (command, args) =>
+        command === "systemctl" && args[0] === "start"
+          ? { code: 1, stdout: "", stderr: "x" }
+          : undefined,
+    });
+    const handed = handover();
+    expect(await shop()).toBe(1);
+    expect(h.asked).toEqual([]);
+    expect(handed).toHaveLength(0);
+  });
+});
+
 describe("what is checked first", () => {
   it.each(["Shop", "1shop", "-shop", "a".repeat(25), "my.shop", "sh_op"])(
     "refuses the name %j",
