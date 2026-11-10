@@ -335,7 +335,7 @@ DCABSM 1.2.0 · Nightly run 03:30 · last check 2026-11-07 12:00 UTC
 → Node 24.11.2 patch for Node 24: sudo dcabsm release update-node
 ```
 
-- An Instance with an unfinished Release change shows `CHANGING` as its state.
+- An Instance with an unfinished Release change shows `CHANGING` as its state. `start` and `restart` refuse it and point to `instance upgrade` or `instance rollback`; `stop` still works.
 - LAST SCHEDULED shows `off` when scheduled Backups are off, and `none` when there are none. It warns when an Instance with scheduled Backups on has none newer than 48 hours.
 - The Unsupported Host mark is always shown.
 - With no Instances, it points to `instance create`.
@@ -385,7 +385,7 @@ Scheduled backups are on.
     [1] self-signed now  [2] cancel (re-run with --cert/--key):
   ```
 
-  A certificate that is expired, doesn't cover the hostname or doesn't match the key is refused with nothing changed (spec 5.6).
+  A certificate that is expired, doesn't cover the hostname or doesn't match the key is refused with nothing changed (spec 5.6), and so is a passphrase-protected key. A chain the system CAs don't trust only prints a warning. `--cert` and `--key` go together. The full chain and the key are copied into the Instance's `nginx/`, root-only.
 - **Self-signed** prints:
 
   ```
@@ -744,7 +744,7 @@ test      ok      20261107T141300Z-manual-26.10.0.tar.gz
   · Archives are unencrypted and as sensitive as root on this Host. They live in /srv/dcabsm/backups/<name>/.
 ```
 
-A stopped Instance is archived without being started. It carries on past a failure and exits 1 if any Backup failed. Not enough space fails before the Instance stops:
+A stopped Instance is archived without being started; so is one in `failed`. An Instance in `activating`, `reloading` or `deactivating` counts as running. An Instance that has never started is skipped (no data) and the exit stays 0. The Summary ends with a count line, for example `1 backed up, 1 skipped (no data), 0 failed`. It carries on past a failure and exits 1 if any Backup failed. Not enough space fails before the Instance stops:
 
 ```
   ✗ Not enough space in /srv/dcabsm/backups for a backup of family (needs ~118 MB, 80 MB free). family was not stopped.

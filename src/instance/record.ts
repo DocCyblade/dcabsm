@@ -1,7 +1,7 @@
-import { readdir, readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { readdir, readFile, readlink } from "node:fs/promises";
+import { basename, join } from "node:path";
 import type { Context } from "../context.ts";
-import { refusal } from "../errors.ts";
+import { CliError, refusal } from "../errors.ts";
 import { exists } from "../fsutil.ts";
 import { INSTANCES_LOGICAL } from "../paths.ts";
 
@@ -16,6 +16,8 @@ export interface InstanceRecord {
   port: number;
   hostname: string;
   scheduledBackups: boolean;
+  /** Only what the System Admin set; nothing for a setting at its default (spec 4.11). */
+  settings?: Record<string, number | boolean | string>;
 }
 
 export const accountOf = (name: string): string => `dcabsm-${name}`;
@@ -61,4 +63,30 @@ export async function requireInstance(ctx: Context, name: string): Promise<Insta
     throw refusal(`There is no Instance named ${name}.`, "See the list: dcabsm instance list");
   }
   return record;
+}
+
+/** The marker an unfinished Release change leaves in the Instance directory. */
+export const changingMarker = (ctx: Context, name: string): string =>
+  join(instanceDir(ctx, name), ".changing-release");
+
+export const isChanging = (ctx: Context, name: string): Promise<boolean> =>
+  exists(changingMarker(ctx, name));
+
+/** Refuses while a Release change is unfinished. */
+export async function refuseIfChanging(ctx: Context, name: string): Promise<void> {
+  if (await isChanging(ctx, name)) {
+    throw refusal(
+      `${name} has an unfinished Release change.`,
+      "Finish it first: dcabsm instance upgrade or dcabsm instance rollback",
+    );
+  }
+}
+
+/** The Release the Instance's `release` link points to. */
+export async function runningRelease(ctx: Context, name: string): Promise<string> {
+  try {
+    return basename(await readlink(join(instanceDir(ctx, name), "release")));
+  } catch {
+    throw new CliError(`${name} has no Release link.`, "Run: sudo dcabsm host doctor");
+  }
 }

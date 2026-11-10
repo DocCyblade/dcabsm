@@ -3,8 +3,12 @@ import { hostDoctor } from "./host/doctor.ts";
 import { hostSetup } from "./host/setup.ts";
 import { hostCheckUpdates } from "./host/updates.ts";
 import { releaseInstall } from "./release/install.ts";
+import { backupCreate } from "./backup/create.ts";
+import { backupList } from "./backup/list.ts";
 import { instanceCreate } from "./instance/create.ts";
+import { instanceLogs, instanceRestart, instanceStart, instanceStop } from "./instance/controls.ts";
 import { instanceList, instanceShow } from "./instance/list.ts";
+import { instanceSet, instanceSettings, instanceUnset } from "./instance/settings.ts";
 import { releaseList } from "./release/list.ts";
 import { versionLine } from "./version.ts";
 
@@ -112,23 +116,27 @@ export const table: Noun[] = [
         usage: "start <names>|--all",
         summary: "Start Instances",
         changes: true,
+        run: instanceStart,
       },
       {
         name: "stop",
         usage: "stop <names>|--all",
         summary: "Stop Instances",
         changes: true,
+        run: instanceStop,
       },
       {
         name: "restart",
         usage: "restart <names>|--all",
         summary: "Restart Instances",
         changes: true,
+        run: instanceRestart,
       },
       {
         name: "logs",
         usage: "logs <name> [-f] [--since <time>]",
         summary: "Read an Instance's journal",
+        run: instanceLogs,
       },
       {
         name: "set-hostname",
@@ -142,18 +150,25 @@ export const table: Noun[] = [
         summary: "Reset the server password in Actual's own tool",
         changes: true,
       },
-      { name: "settings", usage: "settings <name>", summary: "Show an Instance's settings" },
+      {
+        name: "settings",
+        usage: "settings <name>",
+        summary: "Show an Instance's settings",
+        run: instanceSettings,
+      },
       {
         name: "set",
         usage: "set <name> <key> <value> [--yes]",
         summary: "Change one Instance setting",
         changes: true,
+        run: instanceSet,
       },
       {
         name: "unset",
         usage: "unset <name> <key> [--yes]",
         summary: "Return one Instance setting to Actual's default",
         changes: true,
+        run: instanceUnset,
       },
       {
         name: "upgrade",
@@ -190,8 +205,9 @@ export const table: Noun[] = [
         usage: "create <names>|--all",
         summary: "Take a manual Backup",
         changes: true,
+        run: backupCreate,
       },
-      { name: "list", usage: "list [<names>]", summary: "List archives" },
+      { name: "list", usage: "list [<names>]", summary: "List archives", run: backupList },
       {
         name: "prune",
         usage: "prune [<names>|--all] [--dry-run]",

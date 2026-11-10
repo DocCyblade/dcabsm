@@ -3,21 +3,28 @@ import { basename, join } from "node:path";
 import { parseCommand } from "../args.ts";
 import type { Context } from "../context.ts";
 import { refusal } from "../errors.ts";
-import { exists } from "../fsutil.ts";
 import { instanceListFooter } from "../host/updates.ts";
+import { listArchives, stampTime } from "../backup/archive.ts";
+import { formatColumns } from "../columns.ts";
+import { step } from "../output.ts";
 import { releaseNodeMajor } from "../release/install.ts";
 import { linkedPatch } from "../release/node.ts";
 import type { Invocation } from "../table.ts";
+import { settingsSummary } from "./setting-table.ts";
 import {
   accountOf,
   instanceDir,
   instanceNames,
+  isChanging,
   readRecord,
   requireInstance,
   type InstanceRecord,
 } from "./record.ts";
 
 /** What `instance list` shows: `CHANGING`, `stopped`, or what `systemctl is-active` says. */
+/** One labelled line of `instance show`. */
+type Field = [label: string, value: string];
+
 export type InstanceState =
   | "CHANGING"
   | "stopped"
@@ -41,11 +48,34 @@ export interface InstanceRow {
   state: InstanceState;
   release: string;
   record: InstanceRecord;
+  /** `off`, `none`, or the newest scheduled Backup as `MM-DD HH:MM UTC`. */
+  lastScheduled: string;
+  /** Scheduled Backups are on and none is newer than 48 hours (spec 7.3). */
+  overdue: boolean;
+}
+
+const OVERDUE_MS = 48 * 60 * 60 * 1000;
+
+/** The LAST SCHEDULED column (docs/cli.md) and whether the schedule looks broken. */
+async function scheduleOf(ctx: Context, name: string, record: InstanceRecord) {
+  if (!record.scheduledBackups) return { lastScheduled: "off", overdue: false };
+  const newest = (await listArchives(ctx, name)).filter((a) => a.kind === "scheduled").at(-1);
+  if (!newest) return { lastScheduled: "none", overdue: true };
+  const s = newest.stamp;
+  return {
+    lastScheduled: `${s.slice(4, 6)}-${s.slice(6, 8)} ${s.slice(9, 11)}:${s.slice(11, 13)} UTC`,
+    overdue: ctx.now().getTime() - stampTime(s).getTime() > OVERDUE_MS,
+  };
 }
 
 /** `CHANGING` while a Release change is unfinished, else the unit's state (`stopped` when inactive). */
-async function stateOf(ctx: Context, name: string): Promise<InstanceState> {
-  if (await exists(join(instanceDir(ctx, name), ".changing-release"))) return "CHANGING";
+export async function stateOf(ctx: Context, name: string): Promise<InstanceState> {
+  if (await isChanging(ctx, name)) return "CHANGING";
+  return unitStateOf(ctx, name);
+}
+
+/** What `systemctl is-active` says about the unit (`stopped` when inactive). */
+export async function unitStateOf(ctx: Context, name: string): Promise<InstanceState> {
   const res = await ctx.runner.run("systemctl", ["is-active", `dcabsm@${name}`]);
   const state = res.stdout.trim();
   if (state === "" || state === "inactive") return "stopped";
@@ -61,22 +91,29 @@ async function releaseOf(ctx: Context, name: string): Promise<string> {
 }
 
 async function rowFor(ctx: Context, name: string, record: InstanceRecord): Promise<InstanceRow> {
-  return { name, state: await stateOf(ctx, name), release: await releaseOf(ctx, name), record };
+  return {
+    name,
+    state: await stateOf(ctx, name),
+    release: await releaseOf(ctx, name),
+    record,
+    ...(await scheduleOf(ctx, name, record)),
+  };
 }
 
 /** The overview table, one line per Instance. Later tickets add columns and a footer. */
 export function renderInstanceTable(rows: InstanceRow[]): string[] {
   const table = [
-    ["INSTANCE", "STATE", "RELEASE", "HOSTNAME", "PORT"],
-    ...rows.map((r) => [r.name, r.state, r.release, r.record.hostname, String(r.record.port)]),
+    ["INSTANCE", "STATE", "RELEASE", "HOSTNAME", "PORT", "LAST SCHEDULED"],
+    ...rows.map((r) => [
+      r.name,
+      r.state,
+      r.release,
+      r.record.hostname,
+      String(r.record.port),
+      r.lastScheduled,
+    ]),
   ];
-  const widths = table[0]!.map((_, i) => Math.max(...table.map((r) => r[i]!.length)));
-  return table.map((r) =>
-    r
-      .map((cell, i) => (i === r.length - 1 ? cell : cell.padEnd(widths[i]! + 2)))
-      .join("")
-      .trimEnd(),
-  );
+  return formatColumns(table);
 }
 
 /** `instance list` */
@@ -92,6 +129,9 @@ export async function instanceList({ ctx }: Invocation): Promise<void> {
     return;
   }
   for (const line of renderInstanceTable(rows)) ctx.io.out(line);
+  for (const row of rows) {
+    if (row.overdue) step(ctx, "warn", `${row.name}: no scheduled Backup in the last 48 hours`);
+  }
   for (const line of await instanceListFooter(ctx)) ctx.io.out(line);
 }
 
@@ -107,13 +147,15 @@ export async function instanceShow({ ctx, args }: Invocation): Promise<void> {
 
   const major = await releaseNodeMajor(ctx, row.release);
   const patch = major === undefined ? undefined : await linkedPatch(ctx, major);
-  const fields: Array<[string, string]> = [
+  const fields: Field[] = [
     ["Hostname", `https://${record.hostname}`],
     ["Release", patch ? `${row.release} (Node ${patch})` : row.release],
     ["Port", `127.0.0.1:${record.port}`],
     ["Account", accountOf(name)],
     ["Scheduled backups", record.scheduledBackups ? "on" : "off"],
   ];
+  const settings = settingsSummary(record.settings, row.release);
+  if (settings) fields.push(["Settings", settings]);
   ctx.io.out(`${name}  ${row.state}`);
   for (const [label, value] of fields) ctx.io.out(`  ${label.padEnd(17)}  ${value}`);
 }

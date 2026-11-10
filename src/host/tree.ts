@@ -153,7 +153,7 @@ async function orphanAccounts(ctx: Context): Promise<CheckResult[]> {
   }));
 }
 
-async function treeSize(path: string): Promise<number> {
+export async function treeSize(path: string): Promise<number> {
   const info = await lstat(path);
   if (!info.isDirectory()) return info.size;
   let total = 0;

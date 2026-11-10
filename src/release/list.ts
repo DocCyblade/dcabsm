@@ -1,5 +1,6 @@
 import { readdir, readlink } from "node:fs/promises";
 import { basename, join } from "node:path";
+import { formatColumns } from "../columns.ts";
 import type { Context } from "../context.ts";
 import type { Invocation } from "../table.ts";
 import { installedReleases, releaseNodeMajor } from "./install.ts";
@@ -40,8 +41,5 @@ export async function releaseList({ ctx }: Invocation): Promise<void> {
     const patch = major === undefined ? undefined : await linkedPatch(ctx, major);
     rows.push([version, patch ?? "?", (used.get(version) ?? []).join(", ") || "-"]);
   }
-  const widths = [0, 1].map((i) => Math.max(...rows.map((r) => r[i]!.length)));
-  for (const r of rows) {
-    ctx.io.out(`${r[0]!.padEnd(widths[0]! + 2)}${r[1]!.padEnd(widths[1]! + 2)}${r[2]}`.trimEnd());
-  }
+  for (const line of formatColumns(rows)) ctx.io.out(line);
 }
