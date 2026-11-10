@@ -135,7 +135,13 @@ echo "== Booting $os with systemd as PID 1"
 docker run -d --name "$name" --privileged --cgroupns=host \
   -v /sys/fs/cgroup:/sys/fs/cgroup:rw --tmpfs /run --tmpfs /run/lock \
   "${hosts[@]}" "${mounts[@]}" -v "$stage:/ci:ro" "dcabsm-test:$os" > /dev/null
-docker exec "$name" systemctl is-system-running --wait || true
+# `--wait` fails at once while systemd has not yet opened its bus, so poll until it answers.
+for _ in $(seq 1 60); do
+  state=$(docker exec "$name" systemctl is-system-running 2>/dev/null || true)
+  case "$state" in running | degraded) break ;; esac
+  sleep 1
+done
+echo "systemd: ${state:-no answer}"
 
 echo "== Running the $mode journey"
 docker exec -e "JOURNEY_MODE=$mode" -e "JOURNEY_VERSION=$version" -e "JOURNEY_NEWER=$newer" \
