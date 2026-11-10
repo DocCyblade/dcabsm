@@ -220,6 +220,41 @@ describe("upload limits and Nginx", () => {
   });
 });
 
+describe("settings with nothing to change", () => {
+  it("unset on a key at default says so and touches nothing", async () => {
+    await start();
+    expect(await run(["instance", "unset", NAME, "upload-limit-mb", "--yes"], h.ctx)).toBe(0);
+    expect(h.out.join("\n")).toContain("Nothing changed");
+    expect(systemctls()).toEqual([]);
+    expect(h.calls.some((c) => c.command === "nginx" || c.command === "chown")).toBe(false);
+  });
+
+  it("set to the value already set says so and touches nothing", async () => {
+    await start();
+    await set("upload-limit-mb", "100", "--yes");
+    h.calls.length = 0;
+    h.out.length = 0;
+    expect(await set("upload-limit-mb", "100", "--yes")).toBe(0);
+    expect(h.out.join("\n")).toContain("Nothing changed");
+    expect(h.calls.filter((c) => !["systemctl", "logger"].includes(c.command))).toEqual([]);
+    expect(systemctls()).toEqual([]);
+  });
+
+  it("writes the record before Nginx reloads", async () => {
+    await start();
+    const inner = h.ctx.runner;
+    let recordAtReload: unknown;
+    h.ctx.runner = {
+      run: async (c, a) => {
+        if (c === "systemctl" && a[0] === "reload") recordAtReload = (await record()).settings;
+        return inner.run(c, a);
+      },
+    };
+    await set("upload-limit-mb", "100", "--yes");
+    expect(recordAtReload).toEqual({ "upload-limit-mb": 100 });
+  });
+});
+
 describe("instance unset", () => {
   it("returns a key to default and drops it from config.json, whatever the Release", async () => {
     await start();

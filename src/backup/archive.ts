@@ -50,6 +50,12 @@ export function timeStamp(d: Date): string {
     .replace(/[-:]/g, "");
 }
 
+/** The time a `timeStamp` names. */
+export const stampTime = (stamp: string): Date =>
+  new Date(
+    `${stamp.slice(0, 4)}-${stamp.slice(4, 6)}-${stamp.slice(6, 8)}T${stamp.slice(9, 11)}:${stamp.slice(11, 13)}:${stamp.slice(13, 15)}Z`,
+  );
+
 export const archiveName = (time: Date, kind: Kind, release: string): string =>
   `${timeStamp(time)}-${kind}-${release}.tar.gz`;
 

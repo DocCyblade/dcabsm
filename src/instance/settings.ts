@@ -1,22 +1,24 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseCommand } from "../args.ts";
+import { formatColumns } from "../columns.ts";
 import type { Context } from "../context.ts";
 import { CliError, refusal } from "../errors.ts";
-import { exists, writeFileAtomic } from "../fsutil.ts";
+import { writeFileAtomic } from "../fsutil.ts";
 import { hostHasIpv6 } from "../host/owned.ts";
 import { nginxTestFailure, systemctl } from "../host/system.ts";
 import { step } from "../output.ts";
 import { confirm } from "../prompt.ts";
 import type { Invocation } from "../table.ts";
-import { instanceRestart, runningRelease } from "./controls.ts";
-import { configJson, vhostConf } from "./files.ts";
+import { instanceRestart } from "./controls.ts";
+import { vhostConf, writeConfigJson } from "./files.ts";
 import { stateOf } from "./list.ts";
 import {
-  accountOf,
   instanceDir,
   recordPath,
+  refuseIfChanging,
   requireInstance,
+  runningRelease,
   type InstanceRecord,
 } from "./record.ts";
 import {
@@ -27,18 +29,12 @@ import {
   UPLOAD_KEYS,
   usedBy,
   type SettingDef,
-  type SettingValue,
 } from "./setting-table.ts";
 
 /** The Instance's record, refusing while a Release change is unfinished. */
 async function requireSettable(ctx: Context, name: string): Promise<InstanceRecord> {
   const record = await requireInstance(ctx, name);
-  if (await exists(join(instanceDir(ctx, name), ".changing-release"))) {
-    throw refusal(
-      `${name} has an unfinished Release change.`,
-      "Finish it first: dcabsm instance upgrade or dcabsm instance rollback",
-    );
-  }
+  await refuseIfChanging(ctx, name);
   return record;
 }
 
@@ -48,20 +44,6 @@ function lookup(key: string): SettingDef {
   const why = neverSettable(key);
   if (why) throw refusal(`${key} can't be set: ${why}.`);
   throw refusal(`${key}: unknown setting.`, `See the list: dcabsm instance settings <name>`);
-}
-
-const show = (value: SettingValue): string => String(value);
-
-/** Writes `config.json` for the Release (spec 4.4), root-owned and readable by the Instance account. */
-async function writeConfig(
-  ctx: Context,
-  name: string,
-  record: InstanceRecord,
-  release: string,
-): Promise<void> {
-  const path = join(instanceDir(ctx, name), "config", "config.json");
-  await writeFileAtomic(path, configJson(name, record, release), 0o640);
-  await ctx.runner.run("chown", [`root:${accountOf(name)}`, path]);
 }
 
 /**
@@ -83,20 +65,37 @@ async function reloadVhost(ctx: Context, name: string, record: InstanceRecord): 
   return `Nginx: client_max_body_size ${bodyLimitMb(record.settings)}m, nginx -t passed, reloaded`;
 }
 
-/** Saves the new record, then handles Nginx and the restart (spec 4.11). */
-async function apply(
-  ctx: Context,
-  name: string,
-  key: string,
-  next: InstanceRecord,
-  yes: boolean | undefined,
-  line: string,
-): Promise<void> {
+/** What a `set` or `unset` is about to do. */
+interface Change {
+  name: string;
+  key: string;
+  before: InstanceRecord;
+  after: InstanceRecord;
+  /** The line that confirms it. */
+  line: string;
+  yes: boolean | undefined;
+}
+
+/** Saves the new record and `config.json`, then handles Nginx and the restart (spec 4.11). */
+async function apply(ctx: Context, change: Change): Promise<void> {
+  const { name, key, before, after, line, yes } = change;
   const release = await runningRelease(ctx, name);
-  // Nginx first, so a failed `nginx -t` leaves the record and config.json as they were.
-  const nginx = UPLOAD_KEYS.includes(key) ? await reloadVhost(ctx, name, next) : undefined;
-  await writeFileAtomic(recordPath(ctx, name), `${JSON.stringify(next, null, 2)}\n`, 0o600);
-  await writeConfig(ctx, name, next, release);
+  const path = recordPath(ctx, name);
+  const oldText = await readFile(path, "utf8");
+  // Files first: if a write fails, Nginx has not moved ahead of the record.
+  await writeFileAtomic(path, `${JSON.stringify(after, null, 2)}\n`, 0o600);
+  await writeConfigJson(ctx, name, after, release);
+  let nginx: string | undefined;
+  if (UPLOAD_KEYS.includes(key)) {
+    try {
+      nginx = await reloadVhost(ctx, name, after);
+    } catch (err) {
+      // A refused Nginx change leaves nothing changed.
+      await writeFileAtomic(path, oldText, 0o600);
+      await writeConfigJson(ctx, name, before, release);
+      throw err;
+    }
+  }
   step(ctx, "done", line);
   if (nginx) step(ctx, "done", nginx);
 
@@ -142,8 +141,19 @@ export async function instanceSet({ ctx, args }: Invocation): Promise<void> {
   if (value === undefined) {
     throw refusal(`${text} is not a valid value for ${key}.`, `Use ${def.expects}.`);
   }
-  const next: InstanceRecord = { ...record, settings: { ...record.settings, [key]: value } };
-  await apply(ctx, name, key, next, values.yes, `${key} = ${show(value)} for ${name}`);
+  if (record.settings?.[key] === value) {
+    step(ctx, "info", `${key} is already ${value} for ${name}. Nothing changed.`);
+    return;
+  }
+  const after: InstanceRecord = { ...record, settings: { ...record.settings, [key]: value } };
+  await apply(ctx, {
+    name,
+    key,
+    before: record,
+    after,
+    line: `${key} = ${value} for ${name}`,
+    yes: values.yes,
+  });
 }
 
 /** `instance unset <name> <key> [--yes]` */
@@ -158,17 +168,24 @@ export async function instanceUnset({ ctx, args }: Invocation): Promise<void> {
   const [name, key] = positionals as [string, string];
   const record = await requireSettable(ctx, name);
   const def = lookup(key);
+  if (record.settings?.[key] === undefined) {
+    step(
+      ctx,
+      "info",
+      `${key} is already at its default (${def.defaultText}) for ${name}. Nothing changed.`,
+    );
+    return;
+  }
   const rest = { ...record.settings };
   delete rest[key];
-  const next: InstanceRecord = { ...record, settings: rest };
-  await apply(
-    ctx,
+  await apply(ctx, {
     name,
     key,
-    next,
-    values.yes,
-    `${key} back to default (${def.defaultText}) for ${name}`,
-  );
+    before: record,
+    after: { ...record, settings: rest },
+    line: `${key} back to default (${def.defaultText}) for ${name}`,
+    yes: values.yes,
+  });
 }
 
 /** `instance settings <name>` */
@@ -187,19 +204,11 @@ export async function instanceSettings({ ctx, args }: Invocation): Promise<void>
       return [
         def.key,
         def.actualKey,
-        value === undefined ? def.defaultText : show(value),
+        value === undefined ? def.defaultText : String(value),
         value === undefined ? "default" : "set",
         usedBy(def, release) ? "yes" : `not used by ${release}`,
       ];
     }),
   ];
-  const widths = rows[0]!.map((_, i) => Math.max(...rows.map((r) => r[i]!.length)));
-  for (const row of rows) {
-    ctx.io.out(
-      row
-        .map((cell, i) => (i === row.length - 1 ? cell : cell.padEnd(widths[i]! + 2)))
-        .join("")
-        .trimEnd(),
-    );
-  }
+  for (const line of formatColumns(rows)) ctx.io.out(line);
 }

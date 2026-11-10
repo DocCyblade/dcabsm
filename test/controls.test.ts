@@ -112,6 +112,19 @@ describe("instance start, stop and restart", () => {
     expect(h.err.join("\n")).toContain("unfinished Release change");
   });
 
+  it("refuses restart during an unfinished Release change, but allows stop", async () => {
+    await start(["test"]);
+    await writeFile(join(h.ctx.paths.instances, "test", ".changing-release"), "");
+    expect(await run(["instance", "restart", "test"], h.ctx)).toBe(2);
+    expect(h.err.join("\n")).toContain("instance upgrade");
+    expect(sysctl()).toEqual([]);
+    expect(await run(["instance", "stop", "test"], h.ctx)).toBe(0);
+    expect(sysctl().map((c) => c.args)).toEqual([
+      ["stop", "dcabsm@test"],
+      ["disable", "dcabsm@test"],
+    ]);
+  });
+
   it("a failed verification exits 1, does not enable, and the rest still run", async () => {
     await start(["a", "b"], { failing: ["a"] });
     expect(await run(["instance", "start", "a", "b"], h.ctx)).toBe(1);
