@@ -615,9 +615,9 @@ describe("instance list and show", () => {
     h.out.length = 0;
     expect(await run(["instance", "list"], h.ctx)).toBe(0);
     expect(h.out).toEqual([
-      "INSTANCE  STATE    RELEASE  HOSTNAME          PORT   LAST SCHEDULED",
-      "shop      active   26.11.1  shop.example.org  15127  none",
-      "two       stopped  26.11.1  two.example.org   15128  none",
+      "INSTANCE  STATE    RELEASE  HOSTNAME          PORT   CERT  LAST SCHEDULED",
+      "shop      active   26.11.1  shop.example.org  15127  ?     none",
+      "two       stopped  26.11.1  two.example.org   15128  ?     none",
       "  ! shop: no scheduled Backup in the last 48 hours",
       "  ! two: no scheduled Backup in the last 48 hours",
       "",

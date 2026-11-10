@@ -311,7 +311,7 @@ describe("instance list", () => {
     const parsed = JSON.parse(await readFile(record, "utf8")) as Record<string, unknown>;
     await writeFile(record, JSON.stringify({ ...parsed, scheduledBackups: false }));
     expect(await run(["instance", "list"], h.ctx)).toBe(0);
-    expect(h.out[0]).toMatch(/LAST SCHEDULED$/);
+    expect(h.out[0]).toMatch(/CERT  LAST SCHEDULED$/);
     expect(h.out[1]).toMatch(/shop .* 11-07 03:30 UTC$/);
     expect(h.out[2]).toMatch(/two .* off$/);
   });

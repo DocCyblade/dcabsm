@@ -52,6 +52,10 @@ export interface FakeNet {
   tarCreateFails: boolean;
   /** Answer every request with a 503. */
   offline: boolean;
+  /** What a TLS connection to 127.0.0.1:443 is served for a hostname: PEM chains, or undefined for no answer. */
+  served: Record<string, string | undefined>;
+  /** Hostname → addresses it resolves to. A hostname missing here does not resolve. */
+  dns: Record<string, string[]>;
   /** Everything fetched, in order. */
   fetched: string[];
   fetch(url: string): FetchResult | undefined;
@@ -156,6 +160,8 @@ export function fakeNet(overrides: Partial<FakeNet> = {}): FakeNet {
     serverVersion: "26.11.1",
     offline: false,
     tarCreateFails: false,
+    served: {},
+    dns: {},
     fetched: [],
     ...overrides,
     fetch(url) {

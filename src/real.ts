@@ -1,4 +1,6 @@
 import { execFile, spawn } from "node:child_process";
+import { lookup } from "node:dns/promises";
+import { connect } from "node:tls";
 import { createInterface } from "node:readline/promises";
 import type { CommandRunner, Fetcher, Io } from "./context.ts";
 
@@ -22,6 +24,32 @@ export const realFetcher: Fetcher = {
   async fetch(url) {
     const res = await fetch(url);
     return { status: res.status, body: new Uint8Array(await res.arrayBuffer()) };
+  },
+  servedChain: (address, port, servername) =>
+    new Promise((resolve, reject) => {
+      // Trust is judged by `cert test`, so the handshake accepts whatever is served.
+      const socket = connect({ host: address, port, servername, rejectUnauthorized: false });
+      socket.setTimeout(5000, () => socket.destroy(new Error("timed out")));
+      socket.once("error", reject);
+      socket.once("secureConnect", () => {
+        const pems: string[] = [];
+        let cert = socket.getPeerCertificate(true);
+        while (cert?.raw && pems.length < 10) {
+          const b64 = cert.raw
+            .toString("base64")
+            .match(/.{1,64}/g)!
+            .join("\n");
+          pems.push(`-----BEGIN CERTIFICATE-----\n${b64}\n-----END CERTIFICATE-----\n`);
+          if (cert.issuerCertificate === cert) break;
+          cert = cert.issuerCertificate;
+        }
+        socket.end();
+        if (pems.length === 0) reject(new Error("no certificate was served"));
+        else resolve(pems.join(""));
+      });
+    }),
+  async resolve(hostname) {
+    return (await lookup(hostname, { all: true })).map((a) => a.address);
   },
 };
 
