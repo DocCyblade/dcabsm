@@ -6,6 +6,7 @@ import { run } from "../src/cli.ts";
 import type { RunResult } from "../src/context.ts";
 import { harness, type Harness } from "./helpers.ts";
 import { fakeHost, type FakeHost } from "./fakehost.ts";
+import { makeCert } from "./certs.ts";
 import { fakeNet, type FakeNet } from "./fakenet.ts";
 
 let h: Harness;
@@ -25,6 +26,7 @@ interface Start {
   ipv6?: boolean;
   hostOverrides?: Partial<FakeHost>;
   clockStepMs?: number;
+  startAt?: Date;
   /** Runs before the fake host's own answer; return a result to override it. */
   runner?: (command: string, args: string[]) => RunResult | undefined;
 }
@@ -36,6 +38,7 @@ async function start(o: Start = {}): Promise<void> {
     net: o.net ?? fakeNet({ serverVersion: "26.11.1" }),
     interactive: o.interactive,
     clockStepMs: o.clockStepMs,
+    startAt: o.startAt,
     answers: o.answers,
     runner: (command, args) => {
       const own = o.runner?.(command, args);
@@ -282,13 +285,10 @@ describe("what is checked first", () => {
     expect(calls("useradd")).toEqual([]);
   });
 
-  it("refuses without a certificate choice on a script, and --cert, which is not built yet", async () => {
+  it("refuses without a certificate choice on a script", async () => {
     await start();
     expect(await create("shop", "--hostname", "shop.example.org")).toBe(2);
     expect(h.err[0]).toContain("No terminal");
-    expect(
-      await create("shop", "--hostname", "shop.example.org", "--cert", "a", "--key", "b"),
-    ).toBe(2);
     expect(await readdir(h.ctx.paths.instances)).toEqual([]);
   });
 
@@ -306,6 +306,85 @@ describe("what is checked first", () => {
     await start({ interactive: true, answers: ["2"] });
     expect(await create("shop", "--hostname", "shop.example.org")).toBe(1);
     expect(await readdir(h.ctx.paths.instances)).toEqual([]);
+  });
+});
+
+describe("instance create --cert --key", () => {
+  const host = "shop.example.org";
+  let files: { cert: string; key: string };
+
+  async function withCerts(c: { cert: string; key: string }, o: Start = {}) {
+    await start({ startAt: new Date(), ...o });
+    files = { cert: join(h.root, "given-cert.pem"), key: join(h.root, "given-key.pem") };
+    await writeFile(files.cert, c.cert);
+    await writeFile(files.key, c.key);
+  }
+  const own = (...extra: string[]) =>
+    create("shop", "--hostname", host, "--cert", files.cert, "--key", files.key, ...extra);
+  const nothingChanged = async () => {
+    expect(await readdir(h.ctx.paths.instances)).toEqual([]);
+    expect(calls("useradd")).toEqual([]);
+  };
+
+  it("copies the full chain and the key into nginx/, root-only, and does not run openssl", async () => {
+    const ca = makeCert("ca.example.org");
+    const leaf = makeCert(host, { ca });
+    await withCerts({ cert: leaf.cert + ca.cert, key: leaf.key });
+    expect(await own()).toBe(0);
+    const nginx = join(dir("shop"), "nginx");
+    const written = await read(join(nginx, "cert.pem"));
+    expect(written.match(/BEGIN CERTIFICATE/g)).toHaveLength(2);
+    expect(written.startsWith(leaf.cert.trim())).toBe(true);
+    expect((await read(join(nginx, "key.pem"))).trim()).toBe(leaf.key.trim());
+    expect(await modeOf(join(nginx, "cert.pem"))).toBe(0o600);
+    expect(await modeOf(join(nginx, "key.pem"))).toBe(0o600);
+    expect(calls("openssl")).toEqual([]);
+    expect(h.out.join("\n")).toMatch(/Certificate for shop\.example\.org, \d+ days left\n/);
+    expect(h.out.join("\n")).not.toContain("Self-signed");
+  });
+
+  it("only warns when the chain is not trusted", async () => {
+    await withCerts(makeCert(host));
+    expect(await own()).toBe(0);
+    expect(h.out.join("\n")).toContain("not trusted by the system CAs");
+  });
+
+  it("refuses a certificate for another hostname, with nothing changed", async () => {
+    await withCerts(makeCert("other.example.org"));
+    expect(await own()).toBe(2);
+    expect(h.err[0]).toContain("does not cover shop.example.org");
+    await nothingChanged();
+  });
+
+  it("refuses a key that does not match, with nothing changed", async () => {
+    await withCerts({ cert: makeCert(host).cert, key: makeCert(host).key });
+    expect(await own()).toBe(2);
+    expect(h.err[0]).toContain("does not match");
+    await nothingChanged();
+  });
+
+  it("refuses an expired certificate, with nothing changed", async () => {
+    await withCerts(makeCert(host, { days: 1 }), {
+      startAt: new Date(Date.now() + 3 * 86_400_000),
+    });
+    expect(await own()).toBe(2);
+    expect(h.err[0]).toContain("expired");
+    await nothingChanged();
+  });
+
+  it("refuses --cert without --key, either with --self-signed, and a missing file", async () => {
+    await withCerts(makeCert(host));
+    expect(await create("shop", "--hostname", host, "--cert", files.cert)).toBe(2);
+    expect(await create("shop", "--hostname", host, "--key", files.key)).toBe(2);
+    expect(await own("--self-signed")).toBe(2);
+    expect(await create("shop", "--hostname", host, "--cert", "/nope", "--key", files.key)).toBe(2);
+    await nothingChanged();
+  });
+
+  it("does not prompt when a certificate is given", async () => {
+    await withCerts(makeCert(host), { interactive: true });
+    expect(await own()).toBe(0);
+    expect(h.asked).toEqual([]);
   });
 });
 

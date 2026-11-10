@@ -18,6 +18,9 @@ import {
 } from "./record.ts";
 
 /** What `instance list` shows: `CHANGING`, `stopped`, or what `systemctl is-active` says. */
+/** One labelled line of `instance show`. */
+type Field = [label: string, value: string];
+
 export type InstanceState =
   | "CHANGING"
   | "stopped"
@@ -107,7 +110,7 @@ export async function instanceShow({ ctx, args }: Invocation): Promise<void> {
 
   const major = await releaseNodeMajor(ctx, row.release);
   const patch = major === undefined ? undefined : await linkedPatch(ctx, major);
-  const fields: Array<[string, string]> = [
+  const fields: Field[] = [
     ["Hostname", `https://${record.hostname}`],
     ["Release", patch ? `${row.release} (Node ${patch})` : row.release],
     ["Port", `127.0.0.1:${record.port}`],
