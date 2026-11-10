@@ -465,8 +465,10 @@ Password changed successfully.
 It refuses:
 
 - with no terminal: "Password reset needs a terminal: you type the new password straight into Actual."
-- on an Instance that has never started, which has no password yet, with a pointer to its hostname
-- on an OpenID-only Instance: "Reset passwords with your OpenID provider."
+- on an Instance that has never started (no `server-files/account.sqlite` yet), which has no password yet, with a pointer to its hostname
+- on an OpenID-only Instance, where Actual's `auth` table has an `openid` row and no `password` row: "Reset passwords with your OpenID provider."
+
+DCABSM runs `runuser -u dcabsm-<name> -- env ... actual-server --config <path> --reset-password` from the Instance's Release with the terminal attached. On a started Instance that has no password yet, the same tool sets the first one. When it succeeds, DCABSM adds one line: anyone signed in has to sign in again.
 
 ### instance settings, set and unset
 
