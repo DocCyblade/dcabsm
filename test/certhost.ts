@@ -46,7 +46,8 @@ export async function certHost(opts: HarnessOptions = {}): Promise<CertHost> {
     h: undefined as unknown as Harness,
   };
   host.h = await harness({
-    startAt: new Date(),
+    // A minute ahead: openssl dates a certificate made later in the test from the real clock.
+    startAt: new Date(Date.now() + 60_000),
     ...opts,
     net,
     runner(command, args) {
