@@ -131,7 +131,7 @@ A notice goes at the top of this README, with the new key's fingerprint. Every H
 
 ## First steps
 
-1. **Set up the Host.** This installs Nginx and `openssl`, writes DCABSM's systemd units and Nginx files, and installs the latest Release of Actual. It checks everything that could make it refuse before it changes anything, shows its plan, and asks once.
+1. **Set up the Host.** This installs Nginx, `openssl` and `xz-utils`, writes DCABSM's systemd units and Nginx files, and installs the latest Release of Actual. It checks everything that could make it refuse before it changes anything, shows its plan, and asks once.
 
    ```
    sudo dcabsm host setup
