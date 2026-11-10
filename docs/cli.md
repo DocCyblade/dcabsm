@@ -172,6 +172,8 @@ error: Another dcabsm command is running (pid 4121: dcabsm instance upgrade --al
   Wait for it to finish, then run again: sudo dcabsm backup create --all
 ```
 
+For `host doctor --fix` the message adds "host doctor --fix did not run: this is the lock, not a problem on the Host.", because exit 1 also means warnings there.
+
 A lock left behind by a process that has died is taken over. Only the Nightly run waits for the lock, for up to 10 minutes (spec 8.2).
 
 ### Logging
@@ -392,6 +394,7 @@ Scheduled backups are on.
   ```
 
 - **Release.** `--release <v>` picks one, installing it if missing. The default is the newest installed Release.
+- **A failed start.** If `nginx -t` fails, everything made is removed. If the start or Verification fails after the Nginx reload, the Instance stays and the command exits 1 with the next steps: `sudo dcabsm instance logs <name>`, then fix it and `sudo dcabsm instance start <name>`, or `sudo dcabsm instance remove <name>`. If the Release's Node is missing on disk, the message says so.
 - There are no flags for Instance settings. Use `instance set` afterwards.
 
 ### instance remove

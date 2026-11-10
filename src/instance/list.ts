@@ -17,19 +17,39 @@ import {
   type InstanceRecord,
 } from "./record.ts";
 
+/** What `instance list` shows: `CHANGING`, `stopped`, or what `systemctl is-active` says. */
+export type InstanceState =
+  | "CHANGING"
+  | "stopped"
+  | "active"
+  | "activating"
+  | "deactivating"
+  | "reloading"
+  | "failed"
+  | "unknown";
+
+const UNIT_STATES: readonly string[] = [
+  "active",
+  "activating",
+  "deactivating",
+  "reloading",
+  "failed",
+];
+
 export interface InstanceRow {
   name: string;
-  state: string;
+  state: InstanceState;
   release: string;
   record: InstanceRecord;
 }
 
 /** `CHANGING` while a Release change is unfinished, else the unit's state (`stopped` when inactive). */
-async function stateOf(ctx: Context, name: string): Promise<string> {
+async function stateOf(ctx: Context, name: string): Promise<InstanceState> {
   if (await exists(join(instanceDir(ctx, name), ".changing-release"))) return "CHANGING";
   const res = await ctx.runner.run("systemctl", ["is-active", `dcabsm@${name}`]);
   const state = res.stdout.trim();
-  return state === "" || state === "inactive" ? "stopped" : state;
+  if (state === "" || state === "inactive") return "stopped";
+  return UNIT_STATES.includes(state) ? (state as InstanceState) : "unknown";
 }
 
 async function releaseOf(ctx: Context, name: string): Promise<string> {

@@ -29,3 +29,12 @@ DCABSM is TypeScript on Node 24, bundled by esbuild into one JS file. It has no 
 - `src/paths.ts`: every path hangs off one root. `DCABSM_ROOT` moves it; the default is `/`. In the shipped completion script it is a test seam only: it lets the real-bash tests run under a temporary root.
 - `src/prompt.ts`, `src/lock.ts`, `src/log.ts`: the helpers every command shares.
 - `test/helpers.ts`: a `Context` on a temporary root with a faked runner and fetcher. Tests assert on the files left behind.
+
+## Before the first release
+
+The `release guard` job fails a `v*` tag while any of this is undone:
+
+1. Set the GitHub owner: `GITHUB_OWNER` in `install.sh`.
+2. Generate the signing key.
+3. Fill `KEY_FINGERPRINT` and `KEY_KEYRING_B64` in `install.sh` (`gpg --export <fpr> | base64 | tr -d '\n'`).
+4. Replace the `XXXX` fingerprint in `README.md` and `docs/cli.md`.

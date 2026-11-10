@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { mkdir, readFile, readdir, readlink, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -382,6 +382,37 @@ describe("failures", () => {
     expect(calls("systemctl").some((a) => a[0] === "enable" && a[1] === "dcabsm@shop")).toBe(false);
     // The Instance stays, for `instance logs` and `instance remove`.
     expect(await exists(dir("shop"))).toBe(true);
+  });
+
+  it("keeps the Instance after a failed start and names the next steps", async () => {
+    await start({ net: fakeNet({ serverUp: false }), clockStepMs: 30_000 });
+    expect(await shop()).toBe(1);
+    expect(await exists(join(dir("shop"), "config/instance.json"))).toBe(true);
+    expect(await exists(join(dir("shop"), "nginx/vhost.conf"))).toBe(true);
+    expect(calls("userdel")).toEqual([]);
+    const text = h.err.join("\n");
+    for (const cmd of ["instance logs shop", "instance start shop", "instance remove shop"]) {
+      expect(text).toContain(`sudo dcabsm ${cmd}`);
+    }
+  });
+
+  it("says so when the Release's Node is missing on disk", async () => {
+    await start({
+      net: fakeNet({ serverUp: false }),
+      clockStepMs: 30_000,
+      runner: (c, a) => {
+        if (c === "systemctl" && a[0] === "start") {
+          for (const n of readdirSync(h.ctx.paths.node)) {
+            rmSync(join(h.ctx.paths.node, n), { recursive: true, force: true });
+          }
+        }
+        return c === "systemctl" && a[0] === "is-active"
+          ? { code: 3, stdout: "inactive\n", stderr: "" }
+          : undefined;
+      },
+    });
+    expect(await shop()).toBe(1);
+    expect(h.err.join("\n")).toContain("Node for Release 26.11.1 is missing");
   });
 
   it("fails when /info reports another version", async () => {
