@@ -173,6 +173,29 @@ grep -rqs "client_max_body_size 61m" /etc/nginx /etc/dcabsm /srv/dcabsm ||
   fail "the vhost does not carry the new upload limit"
 wait_for 60 up alpha.test
 
+step "Upgrade alpha to the newer Release, protected by a Pre-upgrade backup"
+expect_ok dcabsm instance upgrade alpha --to 26.11.0 --yes
+wait_for 60 up alpha.test
+run info alpha.test
+expect_in "26.11.0"
+expect_ok dcabsm backup list alpha
+expect_in "pre-upgrade"
+up beta.test || fail "upgrading alpha took beta down"
+
+step "Retention counts reach the Host settings, and prune applies them"
+expect_ok dcabsm host set keep-pre-upgrade 2
+expect_ok dcabsm host settings
+expect_in "keep-pre-upgrade"
+expect_ok dcabsm backup prune alpha --dry-run
+expect_ok dcabsm backup prune alpha
+expect_ok dcabsm backup list alpha
+expect_in "manual"
+
+step "Node patches: nothing newer is pinned, and the Instances stay up"
+expect_ok dcabsm release update-node --yes
+wait_for 30 up alpha.test
+wait_for 30 up beta.test
+
 step "Reset-password refuses without a terminal"
 expect_refusal "needs a terminal" dcabsm instance reset-password alpha
 
@@ -189,6 +212,16 @@ step "Both Instances are listed"
 expect_ok dcabsm instance list
 expect_in "alpha"
 expect_in "beta"
+
+step "Remove beta; its Backups stay under a .removed- folder"
+expect_ok dcabsm instance remove beta --confirm beta
+wait_for 30 down beta.test
+ls /srv/dcabsm/backups | grep -q '^beta\.removed-' || fail "beta's Backups were not kept under a .removed- folder"
+[ ! -e /srv/dcabsm/instances/beta ] || fail "beta's directory is still there"
+! id dcabsm-beta > /dev/null 2>&1 || fail "beta's account is still there"
+expect_ok dcabsm instance list
+case "$out" in *beta*) fail "beta is still listed after remove" ;; esac
+up alpha.test || fail "removing beta took alpha down"
 
 echo
 echo "journey: pinned journey passed ($n steps)"
