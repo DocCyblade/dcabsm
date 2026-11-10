@@ -6,6 +6,8 @@ Each Actual server is an Instance, with its own data, account, port, hostname an
 
 DCABSM is not part of the Actual project, and Actual's maintainers don't support it.
 
+> **Alpha: still being developed.** DCABSM has no release yet. Commands, flags and behaviour can change without notice, and it is not ready for data you can't afford to lose. Try it on a test Host first.
+
 ## Here be dragons
 
 Read this before you upgrade, roll back or restore an Instance. Your mileage may vary.
