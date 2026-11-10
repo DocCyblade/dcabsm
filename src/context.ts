@@ -21,6 +21,10 @@ export interface FetchResult {
 /** Seam two: every network request. */
 export interface Fetcher {
   fetch(url: string): Promise<FetchResult>;
+  /** The certificate chain, as PEM and leaf first, that a TLS server hands out for `servername`. */
+  servedChain(address: string, port: number, servername: string): Promise<string>;
+  /** The addresses a hostname resolves to; throws when it does not resolve. */
+  resolve(hostname: string): Promise<string[]>;
 }
 
 export interface Io {

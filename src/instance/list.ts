@@ -5,6 +5,7 @@ import type { Context } from "../context.ts";
 import { refusal } from "../errors.ts";
 import { instanceListFooter } from "../host/updates.ts";
 import { listArchives, stampTime } from "../backup/archive.ts";
+import { certColumn } from "../certs/probe.ts";
 import { formatColumns } from "../columns.ts";
 import { step } from "../output.ts";
 import { releaseNodeMajor } from "../release/install.ts";
@@ -48,6 +49,8 @@ export interface InstanceRow {
   state: InstanceState;
   release: string;
   record: InstanceRecord;
+  /** Days left on the certificate file, such as `212d` or `300d self-signed`. */
+  cert: string;
   /** `off`, `none`, or the newest scheduled Backup as `MM-DD HH:MM UTC`. */
   lastScheduled: string;
   /** Scheduled Backups are on and none is newer than 48 hours (spec 7.3). */
@@ -96,6 +99,7 @@ async function rowFor(ctx: Context, name: string, record: InstanceRecord): Promi
     state: await stateOf(ctx, name),
     release: await releaseOf(ctx, name),
     record,
+    cert: await certColumn(ctx, name, record.hostname),
     ...(await scheduleOf(ctx, name, record)),
   };
 }
@@ -103,13 +107,14 @@ async function rowFor(ctx: Context, name: string, record: InstanceRecord): Promi
 /** The overview table, one line per Instance. Later tickets add columns and a footer. */
 export function renderInstanceTable(rows: InstanceRow[]): string[] {
   const table = [
-    ["INSTANCE", "STATE", "RELEASE", "HOSTNAME", "PORT", "LAST SCHEDULED"],
+    ["INSTANCE", "STATE", "RELEASE", "HOSTNAME", "PORT", "CERT", "LAST SCHEDULED"],
     ...rows.map((r) => [
       r.name,
       r.state,
       r.release,
       r.record.hostname,
       String(r.record.port),
+      r.cert,
       r.lastScheduled,
     ]),
   ];

@@ -7,6 +7,8 @@ import { releaseInstall } from "./release/install.ts";
 import { backupCreate } from "./backup/create.ts";
 import { backupList } from "./backup/list.ts";
 import { backupPrune } from "./backup/prune.ts";
+import { certTest } from "./certs/test.ts";
+import { certUpdate } from "./certs/update.ts";
 import { instanceCreate } from "./instance/create.ts";
 import { instanceLogs, instanceRestart, instanceStart, instanceStop } from "./instance/controls.ts";
 import { instanceList, instanceShow } from "./instance/list.ts";
@@ -247,12 +249,18 @@ export const table: Noun[] = [
   {
     name: "cert",
     verbs: [
-      { name: "test", usage: "test [<names>|--all]", summary: "Check what each hostname serves" },
+      {
+        name: "test",
+        usage: "test [<names>|--all]",
+        summary: "Check what each hostname serves",
+        run: certTest,
+      },
       {
         name: "update",
         usage: "update <names>|--all --cert <f> [--key <f>]",
         summary: "Swap in a new certificate",
         changes: true,
+        run: certUpdate,
       },
     ],
   },

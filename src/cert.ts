@@ -105,6 +105,36 @@ export function validateCertificate(ctx: Context, input: CertificateInput): Cert
   };
 }
 
+/** What a certificate chain looks like to a client, without refusing anything (spec 5.7). */
+export interface ChainFacts {
+  /** The SHA-256 fingerprint of the leaf. */
+  fingerprint: string;
+  notAfter: Date;
+  /** Negative once expired. */
+  daysLeft: number;
+  /** Whether the leaf covers the hostname. */
+  covers: boolean;
+  /** Whether the chain leads to a root the system trusts. */
+  trusted: boolean;
+  /** One certificate that signed itself. */
+  selfSigned: boolean;
+}
+
+/** Reads a chain as it is, for `cert test` and `instance list`. Throws a refusal if it holds no certificate. */
+export function inspectChain(ctx: Context, certPem: string, hostname: string): ChainFacts {
+  const chain = parseChain(certPem);
+  const leaf = chain[0]!;
+  const notAfter = new Date(leaf.validTo);
+  return {
+    fingerprint: leaf.fingerprint256,
+    notAfter,
+    daysLeft: Math.floor((notAfter.getTime() - ctx.now().getTime()) / DAY_MS),
+    covers: Boolean(leaf.checkHost(hostname)),
+    trusted: chainTrusted(chain),
+    selfSigned: chain.length === 1 && leaf.checkIssued(leaf),
+  };
+}
+
 async function readPem(path: string, what: string): Promise<string> {
   try {
     return await readFile(path, "utf8");
