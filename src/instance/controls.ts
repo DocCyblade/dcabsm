@@ -48,7 +48,7 @@ async function targets(
   return out;
 }
 
-async function runningRelease(ctx: Context, name: string): Promise<string> {
+export async function runningRelease(ctx: Context, name: string): Promise<string> {
   try {
     return basename(await readlink(join(instanceDir(ctx, name), "release")));
   } catch {

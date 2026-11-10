@@ -231,7 +231,7 @@ async function writeConfigFiles(
     `${JSON.stringify(record, null, 2)}\n`,
     0o600,
   );
-  await writeFileAtomic(config, configJson(name, record), 0o640);
+  await writeFileAtomic(config, configJson(name, record, release), 0o640);
   await run(ctx, "chown", [`root:${accountOf(name)}`, config]);
 }
 
