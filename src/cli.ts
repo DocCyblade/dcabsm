@@ -87,7 +87,15 @@ async function dispatch(argv: string[], ctx: Context): Promise<number> {
   }
 
   const name = `${noun.name} ${verb.name}`;
-  const release = await acquireLock(ctx, commandLine);
+  const release = await acquireLock(ctx, commandLine).catch((err: unknown) => {
+    // Doctor's exit 1 also means warnings, so say this one is only the lock.
+    if (name !== "host doctor" || !(err instanceof CliError)) throw err;
+    throw new CliError(
+      `${err.message} host doctor --fix did not run: this is the lock, not a problem on the Host.`,
+      err.hint,
+      err.code,
+    );
+  });
   let code: void | number;
   try {
     code = await handler({ ctx, args });

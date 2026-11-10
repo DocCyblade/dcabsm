@@ -263,9 +263,22 @@ export async function instanceCreate({ ctx, args }: Invocation): Promise<void> {
       : new CliError(`Could not create ${name}: ${errorMessage(err)}`);
   }
 
-  await systemctl(ctx, "start", unit);
-  const seconds = await verifyInstance(ctx, name, record.port, release);
-  await systemctl(ctx, "enable", unit);
+  // Nginx is fine by now, so a failed start keeps the Instance for `instance logs` (spec 4.6).
+  let seconds: number;
+  try {
+    await systemctl(ctx, "start", unit);
+    seconds = await verifyInstance(ctx, name, record.port, release);
+    await systemctl(ctx, "enable", unit);
+  } catch (err) {
+    const nodeBin = join(instanceDir(ctx, name), "release", "node", "bin", "node");
+    const why = (await exists(nodeBin))
+      ? errorMessage(err)
+      : `the Node for Release ${release} is missing on disk (${nodeBin}), so the unit cannot start`;
+    throw new CliError(
+      `${name} was created but did not start: ${why}`,
+      `Run sudo dcabsm instance logs ${name}. Then fix it and run sudo dcabsm instance start ${name}, or run sudo dcabsm instance remove ${name}.`,
+    );
+  }
   step(ctx, "done", `Started and verified: /health UP, /info ${release} (${seconds}s)`);
 
   ctx.io.out("");

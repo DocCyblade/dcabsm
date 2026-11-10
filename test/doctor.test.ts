@@ -377,6 +377,7 @@ describe("the lock", () => {
     await holdLock("dcabsm x");
     expect(await doctor("--fix", "--yes")).toBe(1);
     expect(h.err[0]).toContain("Another dcabsm command is running");
+    expect(h.err[0]).toContain("the lock, not a problem on the Host");
   });
 
   it("takes no lock and logs nothing without --fix", async () => {
