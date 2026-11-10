@@ -33,7 +33,7 @@ import {
 /** Where Actual keeps what has no copy elsewhere. An Instance that never started leaves them empty. */
 const DATA_DIRS = ["data", "server-files", "user-files"];
 
-async function hasData(dir: string): Promise<boolean> {
+export async function hasData(dir: string): Promise<boolean> {
   for (const d of DATA_DIRS) {
     try {
       if ((await readdir(join(dir, d))).length > 0) return true;
