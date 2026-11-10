@@ -16,6 +16,8 @@ export interface UnsupportedHostMark {
 /** `/etc/dcabsm/dcabsm.json` (spec 2.3). */
 export interface HostConfig {
   layout: number;
+  /** The DCABSM version that last migrated the layout; older versions name it when they refuse (spec 11.4). */
+  layoutSince?: string;
   backupDir: string;
   nightlyTime: string;
   /** Retention count per Backup kind (spec 8.3). */

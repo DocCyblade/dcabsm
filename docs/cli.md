@@ -87,6 +87,13 @@ error: This Host was last changed by a newer DCABSM (layout 4). This is DCABSM 1
   Install DCABSM 2.0.0 or newer: sudo dcabsm self update
 ```
 
+The version named is the one that last migrated the layout (`layoutSince` in `dcabsm.json`). If the Host is on a lower layout than this version expects, every command refuses until `sudo dcabsm self update` has migrated it:
+
+```
+error: This Host is on layout 3, and DCABSM 1.2.0 expects layout 4. Its stored state needs migrating first.
+  Run: sudo dcabsm self update
+```
+
 On an Unsupported Host (spec 10.4), every command except `host doctor` starts with a banner, and `host doctor` shows the mark as a failure:
 
 ```
@@ -205,7 +212,7 @@ Does it match? [y/N] y
 Next: sudo dcabsm host setup
 ```
 
-`--yes` skips the fingerprint question. It never runs setup and never touches apt. If DCABSM is already installed, it points to `sudo dcabsm self update` and stops. See spec 11.3.
+`--yes` skips the fingerprint question. It keeps the key as `/opt/dcabsm/<ver>/share/dcabsm-signing-key.gpg`: the installed key that `self update` trusts. It never runs setup and never touches apt. If DCABSM is already installed, it points to `sudo dcabsm self update` and stops. See spec 11.3.
 
 ## host
 
@@ -243,13 +250,15 @@ Next: sudo dcabsm instance create <name> --hostname <host> --cert <file> --key <
 - `--release <v>` installs that Release instead of the latest stable one.
 - `--backup-dir <path>` moves the backup directory. It can only be set on the first run. A re-run with a different path is refused, because moving Backups is a Manual System Admin task.
 - Setup is safe to re-run. It does only what's missing, and a re-run after a failure carries on. On a Host that is already set up, it prints "Every check passes; nothing to do."
-- **Refusals** (spec 10.3) name what was found and exit 2 with nothing changed: an unsupported OS or architecture, the Proxmox VE host, a container, nginx.org's Nginx package, anything else on port 80 or 443, an Nginx config that fails `nginx -t`, any TurnKey appliance other than Core or Node.js, and TurnKey before its first-boot setup has finished.
+- **Refusals** (spec 10.3) name what was found and exit 2 with nothing changed: an unsupported OS or architecture, the Proxmox VE host, a container, nginx.org's Nginx package, anything else on port 80 or 443, an Nginx config that fails `nginx -t`, any TurnKey appliance other than Core or Node.js, and TurnKey before its first-boot setup has finished (`RUN_FIRSTBOOT` in `/etc/default/inithooks` is not `false`, or `turnkey-init-fence` is still running).
 - **Edited files.** If a file DCABSM owns was edited by hand, setup shows a diff and asks `replace (old copy saved to /etc/dcabsm/replaced/) or keep? [r/k]`. Keep leaves a warning that `host doctor` keeps raising. With no terminal, `--yes` replaces, and without it setup stops before any change and lists the files.
 - **On TurnKey** (spec 10.7), the plan adds one line, and the same "Go ahead?" covers it:
 
   ```
   · Disable TurnKey's nodejs Nginx site, pm2-node.service and confconsole's Let's Encrypt renewal job (nothing is deleted)
   ```
+
+  The line names only the pieces that are in place. On Core with no renewal job there is no line and nothing extra to confirm.
 
 ### host doctor
 
@@ -279,7 +288,7 @@ exit 1: 0 pass or notes, 1 warnings, 2 failures
 - `--fix` fixes only what DCABSM owns. The one exception is the three TurnKey pieces in spec 10.7, which it disables again after asking if they come back.
 - When `--fix` regenerates an Instance's `config.json`, it asks separately whether to restart that Instance. Otherwise it reports "restart needed".
 - Some problems are a Manual System Admin task, such as opening the firewall. Doctor says so and never changes firewall rules.
-- On TurnKey, the OS line names the appliance, for example "TurnKey Node.js 19.0 (Debian 13), amd64, VM".
+- On TurnKey, the OS line names the appliance, for example "TurnKey Node.js 19.0 (Debian 13), amd64, VM". Doctor warns for each disabled piece that is back, and notes `webmin-nginx` if installed.
 
 ### host check-updates
 
@@ -465,8 +474,10 @@ Password changed successfully.
 It refuses:
 
 - with no terminal: "Password reset needs a terminal: you type the new password straight into Actual."
-- on an Instance that has never started, which has no password yet, with a pointer to its hostname
-- on an OpenID-only Instance: "Reset passwords with your OpenID provider."
+- on an Instance that has never started (no `server-files/account.sqlite` yet), which has no password yet, with a pointer to its hostname
+- on an OpenID-only Instance, where Actual's `auth` table has an `openid` row and no `password` row: "Reset passwords with your OpenID provider."
+
+DCABSM runs `runuser -u dcabsm-<name> -- env ... actual-server --config <path> --reset-password` from the Instance's Release with the terminal attached. On a started Instance that has no password yet, the same tool sets the first one. When it succeeds, DCABSM adds one line: anyone signed in has to sign in again.
 
 ### instance settings, set and unset
 
@@ -851,12 +862,14 @@ Installs one stable Release with its Node runtime and checks its native modules 
 
 ```
   · Release 26.10.0
+  · Node runtime 22.20.0
 Remove these unused Releases and any Node runtime no Release uses? [y/N] y
   ✓ Removed Release 26.10.0
+  ✓ Removed Node runtime 22.20.0
   · A rollback to a removed Release reinstalls it from npm, without its old lockfile.
 ```
 
-It keeps a Release that an unfinished Release change still names. With nothing to remove: "No unused Releases."
+It keeps a Release that an unfinished Release change still names, as the from or the to Release. A Node runtime goes when no remaining Release uses it, including an older patch of a major that a kept Release uses. DCABSM's own Node is never touched. Without a terminal it needs `--yes`. With nothing to remove: "No unused Releases."
 
 ### release update-node
 
@@ -887,17 +900,33 @@ Self-update DCABSM 1.2.0 → 1.3.0
   · Never changes an Instance's Release or restarts an Instance.
 Continue? [y/N] y
   ✓ Downloaded dcabsm-1.3.0-linux-amd64.tar.gz
-  ✓ Signature good, checked with gpgv against the installed key XXXX…XXXX
+  ✓ Signature good, checked with gpgv against the installed key
   ✓ Extracted to /opt/dcabsm/1.3.0/
   ✓ /usr/local/bin/dcabsm → /opt/dcabsm/1.3.0/
   ✓ Owned files refreshed: dcabsm@.service, dcabsm-nightly.timer, 2 vhost.conf (nginx -t passed, reloaded)
-  ✓ Removed /opt/dcabsm/1.1.0/ (keeps current and previous)
 
   ! Restart needed: family (its generated config.json changed). Run: sudo dcabsm instance restart family
+  ✓ Removed /opt/dcabsm/1.1.0/ (keeps current and previous)
 ```
 
-- It checks the signature only against the key already installed.
-- A new layout version is migrated forward, after copying `/etc/dcabsm` aside: "Copied /etc/dcabsm aside, migrated layout 3 → 4".
+It needs no `--yes` on a terminal; scripts pass `--yes`. Without `--to` it takes the latest stable version from GitHub.
+
+- It checks `SHA256SUMS.sig` with `gpgv` only against the key already installed (`/opt/dcabsm/<current>/share/dcabsm-signing-key.gpg`), never one from the download, then checks the tarball against `SHA256SUMS`. A bad signature or checksum stops with nothing changed:
+
+  ```
+  error: The signature on SHA256SUMS does not verify against the installed key.
+    Nothing was changed. DCABSM only trusts the key it already has. gpgv: ...
+  ```
+
+- A new signing key can ship in the tarball as `share/dcabsm-signing-key.gpg`. It was vouched for by the old key, so the new version keeps it and later updates check against it. A tarball without one inherits the installed key.
+- Each version knows the layout version it expects (`self version` shows it). When the new version expects a higher layout than the Host stores, the update migrates forward, after copying `/etc/dcabsm` aside: "Copied /etc/dcabsm aside, migrated layout 3 → 4". The migration runs with the new version's own code, under the lock, before the symlink moves. If it fails, or any later step fails (the symlink switch, the refresh), `/etc/dcabsm` is put back, the new version is removed and the symlink stays on the old one:
+
+  ```
+  error: Migrating layout 3 → 4 failed: <reason>
+    /etc/dcabsm was put back as it was. The symlink stays on 1.2.0.
+  ```
+
+- Until a migration has run, every other command refuses (see "Rules every command follows"). Only `self update`, `self version` and `--version` run. Migrations only go forward: a version whose layout is lower than the Host's is refused.
 - `--to <ver>` moves to any stable version, older or newer, only on the same layout:
 
   ```
@@ -905,7 +934,11 @@ Continue? [y/N] y
     Moving to a new layout is only done to the latest version: sudo dcabsm self update
   ```
 
-- An owned file edited by hand is kept, with a warning to review it with `host doctor --fix`.
+- Without `--to`, a latest version equal to the running one reports `DCABSM <ver> is already installed.` (exit 0). A latest version older than the running one is refused (exit 2) as "ahead of the latest", with the `--to` command that would go down. Going down needs an explicit `--to`.
+- `--to <running version>` with a lower stored layout migrates in place: it copies `/etc/dcabsm` aside, runs the migration and the refresh, and puts the copy back if either fails. Nothing is downloaded.
+- After the switch the new version rewrites the owned files and every Instance's `config.json` and `vhost.conf` (nginx -t first; the old files go back if it fails). An Instance whose `config.json` changed and that is running is listed as "Restart needed". An owned file edited by hand is kept, with a warning to review it with `host doctor --fix`.
+- It keeps the new and the previous version in `/opt/dcabsm/` and removes the rest.
+- Two hidden commands, `self migrate` and `self refresh`, are the steps the new version runs for the update. They refuse to run outside it.
 
 ### self version
 

@@ -60,13 +60,16 @@ export function fakeHost(overrides: Partial<FakeHost> = {}): FakeHost {
     dataDevice: "/dev/vda1",
     ...overrides,
     systemctl(args) {
-      const unit = (args[args.length - 1] ?? "").replace(/\.service$/, "");
+      const unit = (args.filter((a) => !a.startsWith("--")).pop() ?? "").replace(/\.service$/, "");
       const yes = (set: Set<string>) => (set.has(unit) ? ok() : fail("", 3));
       if (args[0] === "is-active") return yes(host.active);
       if (args[0] === "is-enabled") return yes(host.enabled);
       if (args[0] === "enable") host.enabled.add(unit);
       if (args[0] === "enable" && args.includes("--now")) host.active.add(unit);
       if (args[0] === "start") host.active.add(unit);
+      if (args[0] === "disable") host.enabled.delete(unit);
+      if (args[0] === "disable" && args.includes("--now")) host.active.delete(unit);
+      if (args[0] === "stop") host.active.delete(unit);
       return ok();
     },
     run(command, args) {

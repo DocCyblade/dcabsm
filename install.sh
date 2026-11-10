@@ -136,6 +136,10 @@ tar -xzf "$tmp/$file" -C "$stage" --strip-components=1 || {
 mv "$stage" "$opt/$version"
 echo "  ✓ Extracted to /opt/dcabsm/$version/"
 
+# The key Self-update trusts from now on (spec 11.2): the one that just verified this install.
+mkdir -p "$opt/$version/share"
+install -m 644 "$tmp/key.gpg" "$opt/$version/share/dcabsm-signing-key.gpg"
+
 mkdir -p "$ROOT/usr/local/bin"
 ln -sfn "/opt/dcabsm/$version/bin/dcabsm" "$ROOT/usr/local/bin/dcabsm"
 echo "  ✓ /usr/local/bin/dcabsm → /opt/dcabsm/$version/bin/dcabsm"

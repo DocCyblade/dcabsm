@@ -8,8 +8,13 @@ import { backupList } from "./backup/list.ts";
 import { instanceCreate } from "./instance/create.ts";
 import { instanceLogs, instanceRestart, instanceStart, instanceStop } from "./instance/controls.ts";
 import { instanceList, instanceShow } from "./instance/list.ts";
+import { instanceResetPassword } from "./instance/reset-password.ts";
 import { instanceSet, instanceSettings, instanceUnset } from "./instance/settings.ts";
 import { releaseList } from "./release/list.ts";
+import { selfMigrate } from "./self/migrations.ts";
+import { selfRefresh } from "./self/refresh.ts";
+import { selfUpdate } from "./self/update.ts";
+import { releasePrune } from "./release/prune.ts";
 import { versionLine } from "./version.ts";
 
 export interface Invocation {
@@ -27,6 +32,8 @@ export interface Verb {
   summary: string;
   /** Routable but left out of `help`. */
   hidden?: boolean;
+  /** Runs on a Host whose stored layout differs from this version's (spec 11.4): Self-update's own steps and `self version`. */
+  passesLayoutGate?: boolean;
   /** Runs without root. Default: root is required. */
   noRoot?: boolean;
   /** Runs before the Host is set up. Default: refuses until `dcabsm.json` exists. */
@@ -149,6 +156,7 @@ export const table: Noun[] = [
         usage: "reset-password <name>",
         summary: "Reset the server password in Actual's own tool",
         changes: true,
+        run: instanceResetPassword,
       },
       {
         name: "settings",
@@ -255,6 +263,7 @@ export const table: Noun[] = [
         usage: "prune [--yes]",
         summary: "Remove Releases no Instance uses, and unused Node runtimes",
         changes: true,
+        run: releasePrune,
       },
       {
         name: "update-node",
@@ -273,6 +282,25 @@ export const table: Noun[] = [
         summary: "Update DCABSM itself",
         beforeSetup: true,
         changes: true,
+        passesLayoutGate: true,
+        run: selfUpdate,
+      },
+      {
+        name: "migrate",
+        usage: "migrate",
+        summary: "A step of self update: migrate the stored layout",
+        hidden: true,
+        beforeSetup: true,
+        passesLayoutGate: true,
+        run: selfMigrate,
+      },
+      {
+        name: "refresh",
+        usage: "refresh",
+        summary: "A step of self update: refresh the owned files",
+        hidden: true,
+        beforeSetup: true,
+        run: selfRefresh,
       },
       {
         name: "version",
@@ -280,6 +308,7 @@ export const table: Noun[] = [
         summary: "Print the installed version. dcabsm --version does the same",
         noRoot: true,
         beforeSetup: true,
+        passesLayoutGate: true,
         run: async ({ ctx }) => {
           ctx.io.out(versionLine());
         },

@@ -12,7 +12,7 @@ import { readHostConfig } from "./config.ts";
 
 const NODE_INDEX = "https://nodejs.org/dist/index.json";
 const NODE_SCHEDULE = "https://raw.githubusercontent.com/nodejs/Release/main/schedule.json";
-const DCABSM_LATEST = "https://api.github.com/repos/DocCyblade/dcabsm/releases/latest";
+export const DCABSM_LATEST = "https://api.github.com/repos/DocCyblade/dcabsm/releases/latest";
 
 /** The last `host check-updates` result, kept at `paths.updateCheck` (spec 2.1). */
 interface Stored {

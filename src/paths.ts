@@ -19,6 +19,14 @@ export interface Paths {
   /** Node's release signing keys, shipped inside the running DCABSM version (spec 3.1). */
   nodeKeyring: string;
   osRelease: string;
+  /** The running version's own directory, `/opt/dcabsm/<ver>`. */
+  installDir: string;
+  /** `/opt/dcabsm`: every kept DCABSM version (spec 11.1). */
+  opt: string;
+  /** `/usr/local/bin/dcabsm`, the link to the current version. */
+  binLink: string;
+  /** The installed signing key: the only key a Self-update trusts (spec 11.2). */
+  signingKey: string;
   /** Where a logical absolute path, such as the stored `backupDir`, lives under the root. */
   under(logical: string): string;
 }
@@ -44,6 +52,10 @@ export function pathsUnder(root: string, installDir: string): Paths {
     releases: join(srv, "releases"),
     nodeKeyring: join(installDir, "share/node-release-keys.gpg"),
     osRelease: under("etc/os-release"),
+    installDir,
+    opt: under("opt/dcabsm"),
+    binLink: under("usr/local/bin/dcabsm"),
+    signingKey: join(installDir, "share/dcabsm-signing-key.gpg"),
     under,
   };
 }

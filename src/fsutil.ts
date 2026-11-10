@@ -1,4 +1,14 @@
-import { access, chmod, chown, lstat, mkdir, readdir, rename, writeFile } from "node:fs/promises";
+import {
+  access,
+  chmod,
+  chown,
+  lstat,
+  mkdir,
+  readdir,
+  readFile,
+  rename,
+  writeFile,
+} from "node:fs/promises";
 import { join } from "node:path";
 
 export async function exists(path: string): Promise<boolean> {
@@ -7,6 +17,15 @@ export async function exists(path: string): Promise<boolean> {
     return true;
   } catch {
     return false;
+  }
+}
+
+/** The text of a file, or undefined when it can't be read (missing or not readable). */
+export async function readTextOr(path: string): Promise<string | undefined> {
+  try {
+    return await readFile(path, "utf8");
+  } catch {
+    return undefined;
   }
 }
 
