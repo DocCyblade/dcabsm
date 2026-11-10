@@ -85,7 +85,7 @@ describe("usage errors", () => {
 
   it("exits 1 for a command whose ticket hasn't built it yet", async () => {
     h = await harness();
-    expect(await run(["host", "settings"], h.ctx)).toBe(1);
-    expect(h.err[0]).toBe("error: host settings is not built yet.");
+    expect(await run(["instance", "rollback", "alpha"], h.ctx)).toBe(1);
+    expect(h.err[0]).toBe("error: instance rollback is not built yet.");
   });
 });
