@@ -79,6 +79,16 @@ describe("release update-node", () => {
     expect(await readlink(join(h.ctx.paths.node, "24"))).toBe("24.11.2");
     expect(await readdir(h.ctx.paths.node)).toContain("24.11.2");
     expect(restarts()).toEqual(["dcabsm@family", "dcabsm@shop"]);
+    // Each restart clears the start-limit count first, so a run of restarts never trips it.
+    const verbs = h.calls
+      .filter((c) => c.command === "systemctl" && ["reset-failed", "restart"].includes(c.args[0]!))
+      .map((c) => `${c.args[0]} ${c.args[1]}`);
+    expect(verbs).toEqual([
+      "reset-failed dcabsm@family",
+      "restart dcabsm@family",
+      "reset-failed dcabsm@shop",
+      "restart dcabsm@shop",
+    ]);
     expect(text()).toContain("Node 24.11.1 → 24.11.2");
     expect(text()).toContain(
       "Restarts, one at a time: family, shop, test (stopped, stays stopped)",
