@@ -5,6 +5,7 @@ import { healthChecks } from "./health.ts";
 import { detectOs, supportedNames } from "./os.ts";
 import { isInstalled } from "./system.ts";
 import { treeChecks } from "./tree.ts";
+import { detectTurnkey, turnkeyChecks } from "./turnkey.ts";
 
 export { isInstalled };
 
@@ -57,6 +58,9 @@ async function osCheck(ctx: Context): Promise<CheckResult> {
       hint: `Supported: ${supportedNames()}. See the README for architectures.`,
     };
   }
+  const turnkey = await detectTurnkey(ctx);
+  if (turnkey.kind === "supported")
+    return { kind: "pass", label: `${turnkey.label} (${os.supported.name}), ${os.arch}` };
   const codename = os.codename ? ` (${os.codename})` : "";
   return { kind: "pass", label: `${os.supported.name}${codename}, ${os.arch}` };
 }
@@ -203,14 +207,16 @@ const refusing = (id: string, test: (ctx: Context) => Promise<CheckResult>): Che
   run: async (ctx) => [await test(ctx)],
 });
 
-/** Every Host check, in the order doctor reports them (spec 10.6). The first six also refuse in setup (spec 10.3). */
+/** Every Host check, in the order doctor reports them (spec 10.6). The refusing ones also refuse in setup (spec 10.3). */
 export const hostChecks: Check[] = [
   refusing("os", osCheck),
+  turnkeyChecks[0]!,
   refusing("proxmox", proxmoxCheck),
   refusing("container", containerCheck),
   refusing("nginx-origin", nginxOrgCheck),
   refusing("ports", portsCheck),
   refusing("nginx-config", nginxConfigCheck),
+  turnkeyChecks[1]!,
   ...healthChecks,
   ...treeChecks,
 ];

@@ -243,13 +243,15 @@ Next: sudo dcabsm instance create <name> --hostname <host> --cert <file> --key <
 - `--release <v>` installs that Release instead of the latest stable one.
 - `--backup-dir <path>` moves the backup directory. It can only be set on the first run. A re-run with a different path is refused, because moving Backups is a Manual System Admin task.
 - Setup is safe to re-run. It does only what's missing, and a re-run after a failure carries on. On a Host that is already set up, it prints "Every check passes; nothing to do."
-- **Refusals** (spec 10.3) name what was found and exit 2 with nothing changed: an unsupported OS or architecture, the Proxmox VE host, a container, nginx.org's Nginx package, anything else on port 80 or 443, an Nginx config that fails `nginx -t`, any TurnKey appliance other than Core or Node.js, and TurnKey before its first-boot setup has finished.
+- **Refusals** (spec 10.3) name what was found and exit 2 with nothing changed: an unsupported OS or architecture, the Proxmox VE host, a container, nginx.org's Nginx package, anything else on port 80 or 443, an Nginx config that fails `nginx -t`, any TurnKey appliance other than Core or Node.js, and TurnKey before its first-boot setup has finished (`RUN_FIRSTBOOT` in `/etc/default/inithooks` is not `false`, or `turnkey-init-fence` is still running).
 - **Edited files.** If a file DCABSM owns was edited by hand, setup shows a diff and asks `replace (old copy saved to /etc/dcabsm/replaced/) or keep? [r/k]`. Keep leaves a warning that `host doctor` keeps raising. With no terminal, `--yes` replaces, and without it setup stops before any change and lists the files.
 - **On TurnKey** (spec 10.7), the plan adds one line, and the same "Go ahead?" covers it:
 
   ```
   · Disable TurnKey's nodejs Nginx site, pm2-node.service and confconsole's Let's Encrypt renewal job (nothing is deleted)
   ```
+
+  The line names only the pieces that are in place. On Core with no renewal job there is no line and nothing extra to confirm.
 
 ### host doctor
 
@@ -279,7 +281,7 @@ exit 1: 0 pass or notes, 1 warnings, 2 failures
 - `--fix` fixes only what DCABSM owns. The one exception is the three TurnKey pieces in spec 10.7, which it disables again after asking if they come back.
 - When `--fix` regenerates an Instance's `config.json`, it asks separately whether to restart that Instance. Otherwise it reports "restart needed".
 - Some problems are a Manual System Admin task, such as opening the firewall. Doctor says so and never changes firewall rules.
-- On TurnKey, the OS line names the appliance, for example "TurnKey Node.js 19.0 (Debian 13), amd64, VM".
+- On TurnKey, the OS line names the appliance, for example "TurnKey Node.js 19.0 (Debian 13), amd64, VM". Doctor warns for each disabled piece that is back, and notes `webmin-nginx` if installed.
 
 ### host check-updates
 
