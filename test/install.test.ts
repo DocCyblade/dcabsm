@@ -149,6 +149,8 @@ describe("install.sh", () => {
     expect(r.out).toContain("Next: sudo dcabsm host setup");
     // The signature is checked against the key inside the script, not one from the download.
     expect(await readFile(join(log, "keyring"), "utf8")).toBe(KEYRING);
+    // Self-update trusts this installed key from now on (spec 11.2).
+    expect(await readFile(join(ver, "share/dcabsm-signing-key.gpg"), "utf8")).toBe(KEYRING);
     expect(await logged("gpgv")).toMatch(/--keyring \S+ \S*SHA256SUMS\.sig \S*SHA256SUMS/);
     expect(await logged("curl")).toContain(
       "https://github.com/octo/dcabsm/releases/download/v1.2.0/dcabsm-1.2.0-linux-amd64.tar.gz",

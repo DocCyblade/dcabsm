@@ -13,6 +13,7 @@ import { helpLines } from "./help.ts";
 import { acquireLock } from "./lock.ts";
 import { logChange } from "./log.ts";
 import { hostNotices } from "./host/notices.ts";
+import { checkLayout } from "./self/layout.ts";
 import { findNoun, findVerb, type Verb } from "./table.ts";
 import { versionLine } from "./version.ts";
 
@@ -73,6 +74,10 @@ async function dispatch(argv: string[], ctx: Context): Promise<number> {
   if (!verb.beforeSetup && !(await exists(ctx.paths.hostConfig))) {
     throw refusal("This Host is not set up yet.", "Run: sudo dcabsm host setup");
   }
+
+  // Self-update's own steps and `self version` pass a Host on another layout (spec 11.4).
+  const selfStep = noun.name === "self" && ["update", "migrate", "version"].includes(verb.name);
+  if (!selfStep) await checkLayout(ctx);
 
   const args = rest;
   if (!(noun.name === "host" && verb.name === "setup"))

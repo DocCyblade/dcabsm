@@ -10,7 +10,7 @@ import { compareText, parseVersion, satisfies } from "./semver.ts";
 
 const DIST = "https://nodejs.org/dist";
 
-async function fetchOk(ctx: Context, url: string): Promise<Uint8Array> {
+export async function fetchOk(ctx: Context, url: string): Promise<Uint8Array> {
   let res;
   try {
     res = await ctx.fetcher.fetch(url);
