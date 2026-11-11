@@ -20,6 +20,9 @@ export interface InstanceRecord {
   settings?: Record<string, number | boolean | string>;
 }
 
+/** The systemd unit of one Instance. */
+export const unitName = (name: string): string => `dcabsm@${name}`;
+
 export const accountOf = (name: string): string => `dcabsm-${name}`;
 
 /** Where an Instance lives as the Host sees it, for text written into files. */

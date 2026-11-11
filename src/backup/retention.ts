@@ -7,18 +7,21 @@ import { listArchives, type ArchiveInfo } from "./archive.ts";
 export const COUNTED_KINDS = ["scheduled", "pre-upgrade", "pre-restore", "pre-clone"] as const;
 export type CountedKind = (typeof COUNTED_KINDS)[number];
 
+/** A Retention count for each counted kind. */
+type Counts = Record<CountedKind, number>;
+
 /** The Retention count for each counted kind: the stored one, else the default. Never below 1. */
-export async function keepCounts(ctx: Context): Promise<Record<CountedKind, number>> {
+export async function keepCounts(ctx: Context): Promise<Counts> {
   return (await keepReport(ctx)).counts;
 }
 
 /** `keepCounts`, plus the kinds whose stored count is unusable and fell back to the default. */
 export async function keepReport(
   ctx: Context,
-): Promise<{ counts: Record<CountedKind, number>; invalid: CountedKind[] }> {
+): Promise<{ counts: Counts; invalid: CountedKind[] }> {
   const stored = (await readHostConfig(ctx))?.keep ?? {};
   const defaults = defaultHostConfig("").keep;
-  const counts = {} as Record<CountedKind, number>;
+  const counts = {} as Counts;
   const invalid: CountedKind[] = [];
   for (const kind of COUNTED_KINDS) {
     const n = stored[kind];
@@ -33,7 +36,7 @@ export async function keepReport(
 }
 
 /** "14 scheduled, 5 pre-upgrade, ..." */
-export const describeCounts = (counts: Record<CountedKind, number>): string =>
+export const describeCounts = (counts: Counts): string =>
   COUNTED_KINDS.map((k) => `${counts[k]} ${k}`).join(", ");
 
 /**
@@ -44,20 +47,20 @@ export const describeCounts = (counts: Record<CountedKind, number>): string =>
 export async function planPrune(
   ctx: Context,
   name: string,
-  counts: Record<CountedKind, number>,
+  counts: Counts,
 ): Promise<ArchiveInfo[]> {
   const archives = await listArchives(ctx, name);
-  const doomed: ArchiveInfo[] = [];
+  const toDelete: ArchiveInfo[] = [];
   for (const kind of COUNTED_KINDS) {
     const newestFirst = archives.filter((a) => a.kind === kind).reverse();
-    doomed.push(...newestFirst.slice(Math.max(1, counts[kind])));
+    toDelete.push(...newestFirst.slice(Math.max(1, counts[kind])));
   }
-  return doomed.sort((a, b) => a.stamp.localeCompare(b.stamp));
+  return toDelete.sort((a, b) => a.stamp.localeCompare(b.stamp));
 }
 
 /** Applies Retention to one Instance and returns what it deleted. The caller holds the lock. */
 export async function pruneInstance(ctx: Context, name: string): Promise<ArchiveInfo[]> {
-  const doomed = await planPrune(ctx, name, await keepCounts(ctx));
-  for (const a of doomed) await rm(a.path, { force: true });
-  return doomed;
+  const toDelete = await planPrune(ctx, name, await keepCounts(ctx));
+  for (const a of toDelete) await rm(a.path, { force: true });
+  return toDelete;
 }

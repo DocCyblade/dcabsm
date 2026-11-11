@@ -19,6 +19,7 @@ import {
   isChanging,
   readRecord,
   requireInstance,
+  unitName,
   type InstanceRecord,
 } from "./record.ts";
 
@@ -79,7 +80,7 @@ export async function stateOf(ctx: Context, name: string): Promise<InstanceState
 
 /** What `systemctl is-active` says about the unit (`stopped` when inactive). */
 export async function unitStateOf(ctx: Context, name: string): Promise<InstanceState> {
-  const res = await ctx.runner.run("systemctl", ["is-active", `dcabsm@${name}`]);
+  const res = await ctx.runner.run("systemctl", ["is-active", unitName(name)]);
   const state = res.stdout.trim();
   if (state === "" || state === "inactive") return "stopped";
   return UNIT_STATES.includes(state) ? (state as InstanceState) : "unknown";

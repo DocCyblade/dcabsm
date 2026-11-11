@@ -1,19 +1,21 @@
 import { chmod, rm, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { parseCommand } from "../args.ts";
+import { validateCertificateFiles, type CertificateInfo } from "../cert.ts";
 import type { Context } from "../context.ts";
 import { Cancelled, CliError, errorMessage, firstLine, refusal } from "../errors.ts";
 import { ensureDir, exists, writeFileAtomic } from "../fsutil.ts";
 import { hostHasIpv6 } from "../host/owned.ts";
-import { nginxTestFailure, startUnit, systemctl } from "../host/system.ts";
+import { nginxTestFailure, systemctl } from "../host/system.ts";
 import { step } from "../output.ts";
+import { confirm } from "../prompt.ts";
 import {
   installedReleases,
   installRelease,
   latestStable,
   planRelease,
 } from "../release/install.ts";
-import { validateCertificateFiles, type CertificateInfo } from "../cert.ts";
+import type { Invocation } from "../table.ts";
 import { vhostConf, writeConfigJson } from "./files.ts";
 import {
   accountOf,
@@ -22,12 +24,11 @@ import {
   instanceDir,
   instanceNames,
   readRecord,
+  unitName,
   type InstanceRecord,
 } from "./record.ts";
 import { runResetTool } from "./reset-password.ts";
-import { verifyInstance } from "./verify.ts";
-import { confirm } from "../prompt.ts";
-import type { Invocation } from "../table.ts";
+import { startVerified } from "./verify.ts";
 
 const SELF_SIGNED_DAYS = 397;
 
@@ -349,12 +350,12 @@ async function startAndVerify(
   record: InstanceRecord,
   release: string,
 ): Promise<void> {
-  const unit = `dcabsm@${name}`;
-  let seconds: number;
+  const unit = unitName(name);
   try {
-    await startUnit(ctx, "start", unit);
-    seconds = await verifyInstance(ctx, name, record.port, release);
-    await systemctl(ctx, "enable", unit);
+    await startVerified(ctx, name, record.port, {
+      release,
+      onVerified: () => systemctl(ctx, "enable", unit),
+    });
   } catch (err) {
     const nodeBin = join(instanceDir(ctx, name), "release", "node", "bin", "node");
     const why = (await exists(nodeBin))
@@ -365,7 +366,20 @@ async function startAndVerify(
       `Run sudo dcabsm instance logs ${name}. Then fix it and run sudo dcabsm instance start ${name}, or run sudo dcabsm instance remove ${name}.`,
     );
   }
-  step(ctx, "done", `Started and verified: /health UP, /info ${release} (${seconds}s)`);
+}
+
+/** Spec 4.6 step 8: on a terminal, without `--yes`, offers the first password. True once it is set. */
+async function offerPassword(ctx: Context, req: CreateRequest): Promise<boolean> {
+  if (req.yes || !ctx.io.interactive || !ctx.runner.inherit) return false;
+  if (!(await confirm(ctx, "Set the server password now?", { defaultYes: true }))) return false;
+  try {
+    await runResetTool(ctx, req.name);
+    return true;
+  } catch (err) {
+    // The Instance is fine, so a failed reset only keeps the warning (spec 4.6).
+    step(ctx, "warn", errorMessage(err));
+    return false;
+  }
 }
 
 /** `instance create <name> --hostname <host> (--cert <f> --key <f> | --self-signed) [--release <v>]` */
@@ -391,18 +405,4 @@ export async function instanceCreate({ ctx, args }: Invocation): Promise<void> {
     );
   }
   ctx.io.out("Scheduled backups are on.");
-}
-
-/** Spec 4.6 step 8: on a terminal, without `--yes`, offers the first password. True once it is set. */
-async function offerPassword(ctx: Context, req: CreateRequest): Promise<boolean> {
-  if (req.yes || !ctx.io.interactive || !ctx.runner.inherit) return false;
-  if (!(await confirm(ctx, "Set the server password now?", { defaultYes: true }))) return false;
-  try {
-    await runResetTool(ctx, req.name);
-    return true;
-  } catch (err) {
-    // The Instance is fine, so a failed reset only keeps the warning (spec 4.6).
-    step(ctx, "warn", errorMessage(err));
-    return false;
-  }
 }

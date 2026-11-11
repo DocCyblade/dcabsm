@@ -3,15 +3,15 @@ import { backupRoot } from "../backup/archive.ts";
 import { hasData, RUNNING_STATES, takeBackup } from "../backup/create.ts";
 import type { Context } from "../context.ts";
 import { errorMessage } from "../errors.ts";
-import { startUnit, systemctl } from "../host/system.ts";
+import { systemctl } from "../host/system.ts";
 import { step } from "../output.ts";
 import { writeConfigJson } from "./files.ts";
 import { unitStateOf } from "./list.ts";
-import { instanceDir, removeMarker, writeMarker, type InstanceRecord } from "./record.ts";
+import { instanceDir, removeMarker, unitName, writeMarker, type InstanceRecord } from "./record.ts";
 import { restoreData } from "./restore-data.ts";
 import { withStartGate } from "./start-gate.ts";
 import { repointRelease, switchRelease } from "./switch.ts";
-import { verifyInstance } from "./verify.ts";
+import { startVerified } from "./verify.ts";
 
 /** How one Instance's upgrade ended (spec 6.1, 6.3). */
 export type Outcome =
@@ -31,17 +31,12 @@ export interface UpgradeJob {
   to: string;
 }
 
-const unit = (name: string) => `dcabsm@${name}`;
-
 /** Starts the unit and checks it runs `release` (spec 6.2). */
-async function startAndVerify(ctx: Context, job: UpgradeJob, release: string): Promise<void> {
-  await startUnit(ctx, "start", unit(job.name));
-  const seconds = await verifyInstance(ctx, job.name, job.record.port, release);
-  step(ctx, "done", `Started and verified: /health UP, /info ${release} (${seconds}s)`);
-}
+const startAndVerify = (ctx: Context, job: UpgradeJob, release: string): Promise<void> =>
+  startVerified(ctx, job.name, job.record.port, { release });
 
 /** The same with the marker in place, so the unit's marker rule is lifted for this start (spec 6.1). */
-const startAndVerifyChanging = (ctx: Context, job: UpgradeJob, release: string): Promise<void> =>
+const startThroughGate = (ctx: Context, job: UpgradeJob, release: string): Promise<void> =>
   withStartGate(ctx, job.name, () => startAndVerify(ctx, job, release));
 
 /** The Instance never started, so it has no data: it only changes Release (spec 6.1). */
@@ -94,7 +89,7 @@ async function rollBack(
   const { name, from } = job;
   step(ctx, "warn", "Rolling back automatically");
   try {
-    await systemctl(ctx, "stop", unit(name));
+    await systemctl(ctx, "stop", unitName(name));
     await writeMarker(ctx, name, {
       operation: "upgrade",
       from,
@@ -106,14 +101,14 @@ async function rollBack(
     step(ctx, "done", `Restored data from ${backup.split("/").at(-1)}`);
     await switchRelease(ctx, name, job.record, from);
     step(ctx, "done", `Switched back to ${from}`);
-    await startAndVerifyChanging(ctx, job, from);
+    await startThroughGate(ctx, job, from);
   } catch (err) {
-    await systemctl(ctx, "stop", unit(name)).catch(() => undefined);
+    await systemctl(ctx, "stop", unitName(name)).catch(() => undefined);
     step(ctx, "failed", `Automatic rollback failed: ${errorMessage(err)}`);
     return { kind: "stuck", why, backup };
   }
   await removeMarker(ctx, name);
-  if (!wasUp) await systemctl(ctx, "stop", unit(name));
+  if (!wasUp) await systemctl(ctx, "stop", unitName(name));
   return { kind: "rolled-back", why };
 }
 
@@ -129,7 +124,7 @@ export async function upgradeInstance(ctx: Context, job: UpgradeJob): Promise<Ou
   let backup: string;
   try {
     // Stopped first, so the Backup holds exactly what the old Release left (spec 6.1 steps 3 and 4).
-    await systemctl(ctx, "stop", unit(name));
+    await systemctl(ctx, "stop", unitName(name));
     step(ctx, "done", `Stopped ${name}`);
     backup = join(await backupRoot(ctx), name, await takeBackup(ctx, name, "pre-upgrade"));
     await writeMarker(ctx, name, { operation: "upgrade", from, to, backup, restoringData: false });
@@ -141,7 +136,7 @@ export async function upgradeInstance(ctx: Context, job: UpgradeJob): Promise<Ou
   try {
     await writeConfigJson(ctx, name, job.record, to);
     step(ctx, "done", `Switched to ${to}, config.json regenerated`);
-    await startAndVerifyChanging(ctx, job, to);
+    await startThroughGate(ctx, job, to);
   } catch (err) {
     step(ctx, "failed", errorMessage(err));
     return rollBack(ctx, job, backup, errorMessage(err), wasUp);
@@ -149,7 +144,7 @@ export async function upgradeInstance(ctx: Context, job: UpgradeJob): Promise<Ou
   await removeMarker(ctx, name);
   // A stopped or failed Instance returns to stopped once it has proved the new Release starts.
   if (!wasUp) {
-    await systemctl(ctx, "stop", unit(name));
+    await systemctl(ctx, "stop", unitName(name));
     step(ctx, "info", `${name} was stopped before the upgrade, so it is stopped again`);
   }
   return { kind: "upgraded" };

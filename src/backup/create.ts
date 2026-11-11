@@ -15,6 +15,7 @@ import {
   refuseIfChanging,
   requireInstance,
   runningRelease,
+  unitName,
 } from "../instance/record.ts";
 import { step } from "../output.ts";
 import { releaseNodeMajor } from "../release/install.ts";
@@ -126,7 +127,7 @@ export async function takeBackup(ctx: Context, name: string, kind: Kind): Promis
   const file = archiveName(time, kind, manifest.release);
   const temp = join(target, `.${file}`);
   const stage = join(target, `.${file}.stage`);
-  const unit = `dcabsm@${name}`;
+  const unit = unitName(name);
   const running = RUNNING_STATES.includes(await unitStateOf(ctx, name));
 
   let failure: unknown;

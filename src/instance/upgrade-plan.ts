@@ -10,10 +10,10 @@ import {
   type Plan,
 } from "../release/install.ts";
 import { compareText } from "../release/semver.ts";
+import { resolveInstanceNames } from "./resolve-names.ts";
 import { unitStateOf, type InstanceState } from "./list.ts";
 import {
   instanceDir,
-  instanceNames,
   refuseIfChanging,
   requireInstance,
   runningRelease,
@@ -37,15 +37,7 @@ export async function resolveNames(
   all: boolean | undefined,
 ): Promise<string[]> {
   const usage = "Usage: dcabsm instance upgrade <names>|--all [--to <v>] [--yes]";
-  if (all && names.length > 0) throw refusal("Give Instance names or --all, not both.", usage);
-  const list = all ? await instanceNames(ctx) : [...new Set(names)];
-  if (list.length === 0) {
-    throw refusal(
-      all ? "There are no Instances." : "Give at least one Instance name, or --all.",
-      usage,
-    );
-  }
-  return list;
+  return resolveInstanceNames(ctx, names, all, { usage });
 }
 
 /**
