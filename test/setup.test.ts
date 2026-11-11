@@ -365,7 +365,7 @@ describe("a Host that later runs an unsupported OS", () => {
     h.err.length = 0;
     h.calls.length = 0;
 
-    expect(await run(["instance", "clone", "alpha"], h.ctx)).toBe(1); // reaches the handler: "not built yet"
+    expect(await run(["instance", "list"], h.ctx)).toBe(0); // reaches the handler
     expect(h.err[0]).toBe(
       "! Fedora Linux 41 on amd64 is not a supported Host. Backup and restore still work, but you are on your own.",
     );
@@ -377,8 +377,8 @@ describe("a Host that later runs an unsupported OS", () => {
   it("stays quiet on a supported OS", async () => {
     await setup(fakeHost());
     h.err.length = 0;
-    await run(["instance", "clone", "alpha"], h.ctx);
-    expect(h.err).toEqual(["error: instance clone is not built yet.", "  See: dcabsm help"]);
+    await run(["instance", "list"], h.ctx);
+    expect(h.err).toEqual([]);
   });
 });
 

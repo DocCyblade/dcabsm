@@ -56,7 +56,15 @@ export function checkHostname(hostname: string): void {
 }
 
 /** The first port from 15127 that is in no Instance record and not listening (spec 4.3). */
-async function freePort(ctx: Context): Promise<number> {
+export async function freePort(ctx: Context): Promise<number> {
+  const taken = await takenPorts(ctx);
+  let port = FIRST_PORT;
+  while (taken.has(port)) port++;
+  return port;
+}
+
+/** Ports in some Instance record or listening on the Host. */
+export async function takenPorts(ctx: Context): Promise<Set<number>> {
   const taken = new Set<number>();
   for (const name of await instanceNames(ctx)) {
     const record = await readRecord(ctx, name);
@@ -67,9 +75,7 @@ async function freePort(ctx: Context): Promise<number> {
     const port = Number(/:(\d+)$/.exec(line.trim().split(/\s+/)[3] ?? "")?.[1]);
     if (port) taken.add(port);
   }
-  let port = FIRST_PORT;
-  while (taken.has(port)) port++;
-  return port;
+  return taken;
 }
 
 /** The certificate files named on the command line. */
@@ -146,7 +152,7 @@ async function chooseCertificate(ctx: Context, req: CreateRequest): Promise<Cert
 }
 
 /** The newest installed Release, or `--release`; installs it first if it is missing. */
-async function resolveRelease(ctx: Context, wanted: string | undefined): Promise<string> {
+export async function resolveRelease(ctx: Context, wanted: string | undefined): Promise<string> {
   const installed = await installedReleases(ctx);
   const version = wanted ?? installed.at(-1) ?? (await latestStable(ctx));
   if (!installed.includes(version)) {
@@ -163,7 +169,7 @@ interface DirSpec {
 }
 
 /** Every Instance directory, with spec 2.2 ownership, before the first start. */
-async function makeDirectories(ctx: Context, name: string): Promise<void> {
+export async function makeDirectories(ctx: Context, name: string): Promise<void> {
   const dir = instanceDir(ctx, name);
   const account = accountOf(name);
   const rootGroup = `root:${account}`;
@@ -182,7 +188,7 @@ async function makeDirectories(ctx: Context, name: string): Promise<void> {
   }
 }
 
-async function writeConfigFiles(
+export async function writeConfigFiles(
   ctx: Context,
   name: string,
   record: InstanceRecord,
@@ -194,15 +200,8 @@ async function writeConfigFiles(
   await writeConfigJson(ctx, name, record, release);
 }
 
-/** Steps 5 and 6 of spec 4.6: account, files, `nginx -t` and reload. Nothing of it stays on failure. */
-async function createFiles(
-  ctx: Context,
-  req: CreateRequest,
-  source: CertSource,
-  record: InstanceRecord,
-  release: string,
-): Promise<void> {
-  const { name, hostname } = req;
+/** Creates the Instance's system account (spec 2.2) and says so. Returns the account name. */
+export async function createAccount(ctx: Context, name: string): Promise<string> {
   const account = accountOf(name);
   await runChecked(ctx, "useradd", [
     "--system",
@@ -215,6 +214,19 @@ async function createFiles(
     account,
   ]);
   step(ctx, "done", `Account ${account}`);
+  return account;
+}
+
+/** Steps 5 and 6 of spec 4.6: account, files, `nginx -t` and reload. Nothing of it stays on failure. */
+async function createFiles(
+  ctx: Context,
+  req: CreateRequest,
+  source: CertSource,
+  record: InstanceRecord,
+  release: string,
+): Promise<void> {
+  const { name, hostname } = req;
+  const account = await createAccount(ctx, name);
 
   try {
     await makeDirectories(ctx, name);
@@ -239,7 +251,7 @@ async function createFiles(
 }
 
 /** Step 7 of spec 4.6. Nginx is fine by now, so a failed start keeps the Instance for `instance logs`. */
-async function startAndVerify(
+export async function startAndVerify(
   ctx: Context,
   name: string,
   record: InstanceRecord,

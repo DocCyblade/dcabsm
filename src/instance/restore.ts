@@ -29,13 +29,14 @@ import {
   type InstanceRecord,
 } from "./record.ts";
 import { chownData, restoreData } from "./restore-data.ts";
-import { SETTINGS, usedBy } from "./setting-table.ts";
+import { reportUnusedSettings, restoreFrom } from "./restore-from.ts";
 import { withStartGate } from "./start-gate.ts";
 import { switchRelease } from "./switch.ts";
 import { startVerified } from "./verify.ts";
 import { planIfMissing } from "./upgrade-plan.ts";
 
-const USAGE = "Usage: dcabsm instance restore <name> [<archive>] [--confirm <name>]";
+const USAGE =
+  "Usage: dcabsm instance restore <name> [<archive>] [--confirm <name>] | restore --from <archive>";
 
 /** The archive to restore: the one given, or the newest in the Instance's backup directory. */
 async function pickArchive(ctx: Context, name: string, given: string | undefined) {
@@ -54,15 +55,6 @@ async function pickArchive(ctx: Context, name: string, given: string | undefined
     );
   }
   return newest.path;
-}
-
-/** Names the settings the Release can't use (spec 4.11): the record keeps them for a later Upgrade. */
-function reportUnusedSettings(ctx: Context, record: InstanceRecord, release: string): void {
-  for (const def of SETTINGS) {
-    if (record.settings?.[def.key] !== undefined && !usedBy(def, release)) {
-      step(ctx, "info", `${def.key}: not used by ${release}`);
-    }
-  }
 }
 
 interface Job {
@@ -178,7 +170,10 @@ export async function instanceRestore({ ctx, args }: Invocation): Promise<void> 
     from: { type: "string" },
   });
   if (values.from !== undefined) {
-    throw refusal("instance restore --from is not available yet.", USAGE);
+    if (positionals.length > 0) {
+      throw refusal("instance restore --from takes an archive and no Instance name.", USAGE);
+    }
+    return restoreFrom(ctx, values.from);
   }
   if (positionals.length < 1 || positionals.length > 2) {
     throw refusal("Give an Instance name and, if you like, an archive.", USAGE);
@@ -187,7 +182,7 @@ export async function instanceRestore({ ctx, args }: Invocation): Promise<void> 
   if (name.includes("/") || name.endsWith(".tar.gz")) {
     throw refusal(
       `${name} looks like an archive, but a restore in place takes an Instance name first.`,
-      `To rebuild an Instance from an archive: sudo dcabsm instance restore --from ${name} (coming in a later release)`,
+      `To rebuild an Instance from an archive: sudo dcabsm instance restore --from ${name}`,
     );
   }
   checkName(name);

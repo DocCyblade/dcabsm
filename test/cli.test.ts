@@ -85,7 +85,15 @@ describe("usage errors", () => {
 
   it("exits 1 for a command whose ticket hasn't built it yet", async () => {
     h = await harness();
-    expect(await run(["instance", "clone", "alpha"], h.ctx)).toBe(1);
-    expect(h.err[0]).toBe("error: instance clone is not built yet.");
+    // Every V1 command is built, so take the handler away from one for the test.
+    const verb = findVerb(findNoun("instance")!, "rollback")!;
+    const built = verb.run;
+    verb.run = undefined;
+    try {
+      expect(await run(["instance", "rollback", "alpha"], h.ctx)).toBe(1);
+    } finally {
+      verb.run = built;
+    }
+    expect(h.err[0]).toBe("error: instance rollback is not built yet.");
   });
 });
