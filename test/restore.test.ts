@@ -231,6 +231,25 @@ describe("instance restore", () => {
     expect(out()).toContain("Restore shop from elsewhere.tar.gz");
   });
 
+  it("starts a running Instance again when the pre-restore Backup fails", async () => {
+    await start();
+    net.tarCreateFails = true;
+    expect(await restore("shop", "--confirm", "shop")).toBe(1);
+    expect(err()).toContain("tar");
+    expect(sysctls()).toEqual(["stop dcabsm@shop", "start dcabsm@shop"]);
+    expect(host.active.has("dcabsm@shop")).toBe(true);
+    // Nothing was touched: no marker, the data is as it was.
+    await expect(stat(inst(".changing-release"))).rejects.toThrow();
+    expect(await readFile(inst("data", "notes"), "utf8")).toBe("v2");
+  });
+
+  it("leaves a stopped Instance stopped when the pre-restore Backup fails", async () => {
+    await start({ stopped: true });
+    net.tarCreateFails = true;
+    expect(await restore("shop", "--confirm", "shop")).toBe(1);
+    expect(sysctls()).toEqual(["stop dcabsm@shop"]);
+  });
+
   it("refuses a path where the name belongs and points to --from", async () => {
     const old = await start();
     expect(await restore(backups("shop", old))).toBe(2);

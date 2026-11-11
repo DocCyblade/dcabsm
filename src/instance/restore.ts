@@ -112,7 +112,21 @@ async function restoreInstance(ctx: Context, job: Job): Promise<void> {
 
   await systemctl(ctx, "stop", unit);
   step(ctx, "done", `Stopped ${name}`);
-  const file = await takeBackup(ctx, name, "pre-restore");
+  let file: string;
+  try {
+    file = await takeBackup(ctx, name, "pre-restore");
+  } catch (err) {
+    // Nothing has changed yet, so a running Instance goes back up as it was.
+    if (job.wasUp) {
+      try {
+        await systemctl(ctx, "start", unit);
+        step(ctx, "info", `${name} was running before the restore, so it is started again`);
+      } catch (again) {
+        step(ctx, "warn", `Could not start ${name} again: ${errorMessage(again)}`);
+      }
+    }
+    throw err;
+  }
   const backup = join(await backupRoot(ctx), name, file);
   await writeMarker(ctx, name, { operation: "restore", from, to, backup, restoringData: true });
 
