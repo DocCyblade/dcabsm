@@ -1,7 +1,7 @@
 import { parseCommand } from "../args.ts";
 import type { Context } from "../context.ts";
 import { CliError, errorMessage, refusal } from "../errors.ts";
-import { startUnit, systemctl } from "../host/system.ts";
+import { systemctl } from "../host/system.ts";
 import { step } from "../output.ts";
 import type { Invocation } from "../table.ts";
 import {
@@ -12,7 +12,7 @@ import {
   unitName,
   type InstanceRecord,
 } from "./record.ts";
-import { verifyInstance } from "./verify.ts";
+import { startVerified } from "./verify.ts";
 
 type Control = "start" | "stop" | "restart";
 
@@ -77,11 +77,13 @@ async function control(verb: Control, { ctx, args }: Invocation): Promise<void> 
         );
         continue;
       }
-      await startUnit(ctx, verb, unit);
-      const release = await runningRelease(ctx, name);
-      const seconds = await verifyInstance(ctx, name, record.port, release);
-      if (verb === "start") await systemctl(ctx, "enable", unit);
-      step(ctx, "done", `Started and verified: /health UP, /info ${release} (${seconds}s)`);
+      await startVerified(ctx, name, record.port, {
+        verb,
+        release: () => runningRelease(ctx, name),
+        onVerified: async () => {
+          if (verb === "start") await systemctl(ctx, "enable", unit);
+        },
+      });
     } catch (err) {
       failed++;
       step(ctx, "failed", `${name}: ${errorMessage(err)}`);

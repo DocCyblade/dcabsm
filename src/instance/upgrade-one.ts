@@ -3,7 +3,7 @@ import { backupRoot } from "../backup/archive.ts";
 import { hasData, RUNNING_STATES, takeBackup } from "../backup/create.ts";
 import type { Context } from "../context.ts";
 import { errorMessage } from "../errors.ts";
-import { startUnit, systemctl } from "../host/system.ts";
+import { systemctl } from "../host/system.ts";
 import { step } from "../output.ts";
 import { writeConfigJson } from "./files.ts";
 import { unitStateOf } from "./list.ts";
@@ -11,7 +11,7 @@ import { instanceDir, removeMarker, unitName, writeMarker, type InstanceRecord }
 import { restoreData } from "./restore-data.ts";
 import { withStartGate } from "./start-gate.ts";
 import { repointRelease, switchRelease } from "./switch.ts";
-import { verifyInstance } from "./verify.ts";
+import { startVerified } from "./verify.ts";
 
 /** How one Instance's upgrade ended (spec 6.1, 6.3). */
 export type Outcome =
@@ -32,11 +32,8 @@ export interface UpgradeJob {
 }
 
 /** Starts the unit and checks it runs `release` (spec 6.2). */
-async function startAndVerify(ctx: Context, job: UpgradeJob, release: string): Promise<void> {
-  await startUnit(ctx, "start", unitName(job.name));
-  const seconds = await verifyInstance(ctx, job.name, job.record.port, release);
-  step(ctx, "done", `Started and verified: /health UP, /info ${release} (${seconds}s)`);
-}
+const startAndVerify = (ctx: Context, job: UpgradeJob, release: string): Promise<void> =>
+  startVerified(ctx, job.name, job.record.port, { release });
 
 /** The same with the marker in place, so the unit's marker rule is lifted for this start (spec 6.1). */
 const startAndVerifyChanging = (ctx: Context, job: UpgradeJob, release: string): Promise<void> =>

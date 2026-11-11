@@ -1,5 +1,7 @@
 import type { Context } from "../context.ts";
 import { CliError } from "../errors.ts";
+import { startUnit } from "../host/system.ts";
+import { step } from "../output.ts";
 import { unitName } from "./record.ts";
 
 /** How long a started Instance has to come up (spec 6.2). */
@@ -68,4 +70,30 @@ export async function verifyInstance(
     await pause(POLL_MS);
   }
   throw fail(last);
+}
+
+export interface StartVerifiedOptions {
+  /** `start` by default. */
+  verb?: "start" | "restart";
+  /** The Release to expect; a function is asked after the unit is started. */
+  release: string | (() => Promise<string>);
+  /** Runs once the unit is started, before Verification. */
+  onStarted?: () => Promise<void>;
+  /** Runs once Verification passes, before the success line. */
+  onVerified?: () => Promise<void>;
+}
+
+/** Starts the unit, runs Verification and says so: the steps every start of an Instance shares. */
+export async function startVerified(
+  ctx: Context,
+  name: string,
+  port: number,
+  { verb = "start", release, onStarted, onVerified }: StartVerifiedOptions,
+): Promise<void> {
+  await startUnit(ctx, verb, unitName(name));
+  await onStarted?.();
+  const version = typeof release === "string" ? release : await release();
+  const seconds = await verifyInstance(ctx, name, port, version);
+  await onVerified?.();
+  step(ctx, "done", `Started and verified: /health UP, /info ${version} (${seconds}s)`);
 }

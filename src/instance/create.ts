@@ -5,7 +5,7 @@ import type { Context } from "../context.ts";
 import { Cancelled, CliError, errorMessage, firstLine, refusal } from "../errors.ts";
 import { ensureDir, exists, writeFileAtomic } from "../fsutil.ts";
 import { hostHasIpv6 } from "../host/owned.ts";
-import { nginxTestFailure, startUnit, systemctl } from "../host/system.ts";
+import { nginxTestFailure, systemctl } from "../host/system.ts";
 import { step } from "../output.ts";
 import {
   installedReleases,
@@ -26,7 +26,7 @@ import {
   type InstanceRecord,
 } from "./record.ts";
 import { runResetTool } from "./reset-password.ts";
-import { verifyInstance } from "./verify.ts";
+import { startVerified } from "./verify.ts";
 import { confirm } from "../prompt.ts";
 import type { Invocation } from "../table.ts";
 
@@ -351,11 +351,11 @@ async function startAndVerify(
   release: string,
 ): Promise<void> {
   const unit = unitName(name);
-  let seconds: number;
   try {
-    await startUnit(ctx, "start", unit);
-    seconds = await verifyInstance(ctx, name, record.port, release);
-    await systemctl(ctx, "enable", unit);
+    await startVerified(ctx, name, record.port, {
+      release,
+      onVerified: () => systemctl(ctx, "enable", unit),
+    });
   } catch (err) {
     const nodeBin = join(instanceDir(ctx, name), "release", "node", "bin", "node");
     const why = (await exists(nodeBin))
@@ -366,7 +366,6 @@ async function startAndVerify(
       `Run sudo dcabsm instance logs ${name}. Then fix it and run sudo dcabsm instance start ${name}, or run sudo dcabsm instance remove ${name}.`,
     );
   }
-  step(ctx, "done", `Started and verified: /health UP, /info ${release} (${seconds}s)`);
 }
 
 /** `instance create <name> --hostname <host> (--cert <f> --key <f> | --self-signed) [--release <v>]` */
