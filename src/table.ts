@@ -1,5 +1,6 @@
 import type { Context } from "./context.ts";
 import { hostDoctor } from "./host/doctor.ts";
+import { hostNightly } from "./host/nightly.ts";
 import { hostSet, hostSettings } from "./host/settings.ts";
 import { hostSetup } from "./host/setup.ts";
 import { hostCheckUpdates } from "./host/updates.ts";
@@ -7,6 +8,7 @@ import { releaseInstall } from "./release/install.ts";
 import { backupCreate } from "./backup/create.ts";
 import { backupList } from "./backup/list.ts";
 import { backupPrune } from "./backup/prune.ts";
+import { backupSchedule } from "./backup/schedule.ts";
 import { certTest } from "./certs/test.ts";
 import { certUpdate } from "./certs/update.ts";
 import { instanceCreate } from "./instance/create.ts";
@@ -16,6 +18,7 @@ import { instanceRemove } from "./instance/remove.ts";
 import { instanceRestore } from "./instance/restore.ts";
 import { instanceUpgrade } from "./instance/upgrade.ts";
 import { instanceResetPassword } from "./instance/reset-password.ts";
+import { instanceSetHostname } from "./instance/set-hostname.ts";
 import { instanceSet, instanceSettings, instanceUnset } from "./instance/settings.ts";
 import { releaseList } from "./release/list.ts";
 import { selfMigrate } from "./self/migrations.ts";
@@ -104,7 +107,8 @@ export const table: Noun[] = [
         usage: "nightly",
         summary: "The Nightly run, started by the dcabsm-nightly service",
         hidden: true,
-        changes: true,
+        // It takes the lock per Instance itself and logs its own line (spec 8.2).
+        run: hostNightly,
       },
     ],
   },
@@ -165,6 +169,7 @@ export const table: Noun[] = [
         usage: "set-hostname <name> <host> [--cert <f> [--key <f>] | --self-signed]",
         summary: "Move an Instance to a new hostname",
         changes: true,
+        run: instanceSetHostname,
       },
       {
         name: "reset-password",
@@ -245,6 +250,7 @@ export const table: Noun[] = [
         usage: "schedule <name> on|off",
         summary: "Switch scheduled Backups on or off for one Instance",
         changes: true,
+        run: backupSchedule,
       },
     ],
   },
