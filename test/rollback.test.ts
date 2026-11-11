@@ -353,6 +353,14 @@ describe("instance rollback --restore-data", () => {
     expect(await readFile(inst("data", "notes"), "utf8")).toBe("v2");
   });
 
+  it("does not let --yes alone allow the data restore", async () => {
+    await start();
+    expect(await rollback("shop", "--restore-data", "--yes")).toBe(2);
+    expect(err()).toContain("--confirm shop");
+    expect(sysctls()).toEqual([]);
+    expect(await readFile(inst("data", "notes"), "utf8")).toBe("v2");
+  });
+
   it("refuses without a terminal or --confirm", async () => {
     await start();
     expect(await rollback("shop", "--restore-data")).toBe(2);
