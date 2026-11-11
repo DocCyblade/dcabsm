@@ -1,7 +1,7 @@
-import { readFile, stat } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { parseCommand } from "../args.ts";
-import { readManifest } from "../backup/archive.ts";
+import { backupPath, readManifest, requireArchiveFile } from "../backup/archive.ts";
 import { checkSpace, takeBackup } from "../backup/create.ts";
 import { validateCertificate, validateCertificateFiles } from "../cert.ts";
 import { askForCertificate, hostnameInUse, type CertSource } from "../certs/provide.ts";
@@ -14,7 +14,7 @@ import { confirmOrCancel } from "../prompt.ts";
 import { installRelease } from "../release/install.ts";
 import type { Invocation } from "../table.ts";
 import { checkHostname, freePort, startAndVerify } from "./create.ts";
-import { backupPath, buildInstance, extractArchive } from "./from-archive.ts";
+import { buildInstance, extractArchive } from "./from-archive.ts";
 import { checkName, instanceDir, refuseIfChanging, requireInstance } from "./record.ts";
 import { planIfMissing } from "./upgrade-plan.ts";
 
@@ -142,10 +142,7 @@ export async function instanceClone({ ctx, args }: Invocation): Promise<void> {
     archive = await backupPath(ctx, source, await takeBackup(ctx, source, "pre-clone"));
   } else {
     archive = req.archive!;
-    const found = await stat(archive).catch(() => undefined);
-    if (!found?.isFile()) {
-      throw refusal(`${archive} is not an archive file.`, "Give the path of a .tar.gz archive.");
-    }
+    await requireArchiveFile(archive);
     label = basename(archive);
     ctx.io.out(`Clone from ${label} → ${name}`);
   }

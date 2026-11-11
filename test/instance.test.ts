@@ -2,6 +2,7 @@ import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { mkdir, readFile, readdir, readlink, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { parseRecord } from "../src/instance/record.ts";
 import { run } from "../src/cli.ts";
 import type { RunResult } from "../src/context.ts";
 import { harness, type Harness } from "./helpers.ts";
@@ -693,5 +694,15 @@ describe("instance list and show", () => {
     await start();
     expect(await run(["instance", "show", "nope"], h.ctx)).toBe(2);
     expect(h.err.join("\n")).toContain("instance list");
+  });
+});
+
+describe("parseRecord", () => {
+  it("reads a record and refuses text that is not one", () => {
+    const text = JSON.stringify({ port: 15127, hostname: "a.test", scheduledBackups: true });
+    expect(parseRecord(text)?.port).toBe(15127);
+    expect(parseRecord("{")).toBeUndefined();
+    expect(parseRecord(JSON.stringify({ port: "x", hostname: "a.test" }))).toBeUndefined();
+    expect(parseRecord(JSON.stringify({ port: 1 }))).toBeUndefined();
   });
 });

@@ -1,5 +1,4 @@
-import { join } from "node:path";
-import { backupRoot } from "../backup/archive.ts";
+import { backupPath } from "../backup/archive.ts";
 import { hasData, RUNNING_STATES, takeBackup } from "../backup/create.ts";
 import type { Context } from "../context.ts";
 import { errorMessage } from "../errors.ts";
@@ -126,7 +125,7 @@ export async function upgradeInstance(ctx: Context, job: UpgradeJob): Promise<Ou
     // Stopped first, so the Backup holds exactly what the old Release left (spec 6.1 steps 3 and 4).
     await systemctl(ctx, "stop", unitName(name));
     step(ctx, "done", `Stopped ${name}`);
-    backup = join(await backupRoot(ctx), name, await takeBackup(ctx, name, "pre-upgrade"));
+    backup = await backupPath(ctx, name, await takeBackup(ctx, name, "pre-upgrade"));
     await writeMarker(ctx, name, { operation: "upgrade", from, to, backup, restoringData: false });
     await repointRelease(ctx, name, to);
   } catch (err) {

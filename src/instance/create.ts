@@ -55,9 +55,13 @@ export function checkHostname(hostname: string): void {
   }
 }
 
-/** The first port from 15127 that is in no Instance record and not listening (spec 4.3). */
-export async function freePort(ctx: Context): Promise<number> {
+/**
+ * `preferred` if nothing uses it, else the first port from 15127 that is in no Instance record and
+ * not listening (spec 4.3).
+ */
+export async function freePort(ctx: Context, preferred?: number): Promise<number> {
   const taken = await takenPorts(ctx);
+  if (preferred !== undefined && !taken.has(preferred)) return preferred;
   let port = FIRST_PORT;
   while (taken.has(port)) port++;
   return port;

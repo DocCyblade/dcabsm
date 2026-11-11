@@ -65,12 +65,12 @@ export async function instanceRemove({ ctx, args }: Invocation): Promise<void> {
       await takeBackup(ctx, name, "final");
     } catch (err) {
       throw new CliError(
-        `${name} was not removed: the final backup failed: ${errorMessage(err)}`,
+        `${name} was not removed: the final Backup failed: ${errorMessage(err)}`,
         `${name} is stopped. Fix the problem and run the command again, or start it: sudo dcabsm instance start ${name}`,
       );
     }
   } else {
-    step(ctx, "info", `${name} has never started, so it has no data: no final backup was taken.`);
+    step(ctx, "info", `${name} has never started, so it has no data: no final Backup was taken.`);
   }
 
   const root = await backupRoot(ctx);

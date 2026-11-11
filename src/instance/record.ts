@@ -33,9 +33,21 @@ export const instanceDir = (ctx: Context, name: string): string => join(ctx.path
 export const recordPath = (ctx: Context, name: string): string =>
   join(instanceDir(ctx, name), "config", "instance.json");
 
+/** The record in `text`, or undefined when it is not JSON or has no port and hostname. The one reader of `instance.json`. */
+export function parseRecord(text: string): InstanceRecord | undefined {
+  try {
+    const record = JSON.parse(text) as InstanceRecord;
+    return typeof record?.port === "number" && typeof record.hostname === "string"
+      ? record
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function readRecord(ctx: Context, name: string): Promise<InstanceRecord | undefined> {
   try {
-    return JSON.parse(await readFile(recordPath(ctx, name), "utf8")) as InstanceRecord;
+    return parseRecord(await readFile(recordPath(ctx, name), "utf8"));
   } catch {
     return undefined;
   }
