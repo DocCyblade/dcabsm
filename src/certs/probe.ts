@@ -2,7 +2,8 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { inspectChain } from "../cert.ts";
 import type { Context } from "../context.ts";
-import { errorMessage, refusal } from "../errors.ts";
+import { errorMessage } from "../errors.ts";
+import { resolveInstanceNames } from "../instance/resolve-names.ts";
 import {
   instanceDir,
   instanceNames,
@@ -33,19 +34,11 @@ export async function certTargets(
   all: boolean | undefined,
   allowEmpty: boolean,
 ): Promise<CertTarget[]> {
-  if (all && names.length > 0) {
-    throw refusal("Give Instance names or --all, not both.", `Usage: dcabsm ${usage}`);
-  }
-  const everyone = all || (allowEmpty && names.length === 0);
-  const list = everyone ? await instanceNames(ctx) : [...new Set(names)];
-  if (list.length === 0) {
-    throw refusal(
-      everyone ? "There are no Instances." : "Give at least one Instance name, or --all.",
-      everyone
-        ? "Create one: dcabsm instance create <name> --hostname <host> --self-signed"
-        : `Usage: dcabsm ${usage}`,
-    );
-  }
+  const list = await resolveInstanceNames(ctx, names, all, {
+    usage: `Usage: dcabsm ${usage}`,
+    allowEmpty,
+    noInstancesHint: "Create one: dcabsm instance create <name> --hostname <host> --self-signed",
+  });
   return targetsOf(ctx, list);
 }
 
