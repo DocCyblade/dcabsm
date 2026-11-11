@@ -714,7 +714,7 @@ On every device
 - Any Instance setting the archive's Release doesn't know is listed as `<key>: not used by <release>`.
 - If verification fails, DCABSM restores the `pre-restore` Backup automatically.
 - A stopped Instance returns to stopped.
-- A path given where the name belongs is refused, with a pointer to `--from` (marked "coming in a later release" until it exists).
+- A path given where the name belongs is refused, with a pointer to `--from`.
 
 ### instance restore --from
 

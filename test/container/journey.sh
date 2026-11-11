@@ -293,5 +293,24 @@ expect_ok dcabsm instance list
 case "$out" in *beta*) fail "beta is still listed after remove" ;; esac
 up alpha.test || fail "removing beta took alpha down"
 
+step "Restore --from rebuilds an Instance that was lost"
+expect_ok dcabsm backup create alpha
+lost="$(ls -t /srv/dcabsm/backups/alpha/*.tar.gz | head -1)"
+cp "$lost" /root/alpha-lost.tar.gz
+# While alpha exists, --from refuses and points to the two ways forward.
+expect_refusal "already exists" dcabsm instance restore --from /root/alpha-lost.tar.gz
+expect_in "instance clone --from"
+expect_ok dcabsm instance remove alpha --confirm alpha
+wait_for 30 down alpha.test
+expect_ok dcabsm instance restore --from /root/alpha-lost.tar.gz
+expect_in "Point DNS for alpha.test"
+expect_in "Click Revert"
+wait_for 60 up alpha.test
+run info alpha.test
+expect_in "26.11.0"
+id dcabsm-alpha > /dev/null 2>&1 || fail "restore --from did not create alpha's account"
+expect_ok dcabsm instance list
+expect_in "alpha"
+
 echo
 echo "journey: pinned journey passed ($n steps)"
