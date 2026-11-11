@@ -1,31 +1,23 @@
-import { readFile } from "node:fs/promises";
 import { parseCommand } from "../args.ts";
 import { inspectChain, validateCertificate } from "../cert.ts";
 import type { Context } from "../context.ts";
 import { CliError, errorMessage, refusal } from "../errors.ts";
-import { writeFileAtomic } from "../fsutil.ts";
+import { readOrRefuse, writeFileAtomic } from "../fsutil.ts";
 import { nginxTestFailure, systemctl } from "../host/system.ts";
 import { refuseIfChanging } from "../instance/record.ts";
 import { step } from "../output.ts";
+import { snapshotFiles, type Snapshot } from "../rollback.ts";
 import type { Invocation } from "../table.ts";
 import { certTargets, confirmServed, SERVE_SECONDS, type CertTarget } from "./probe.ts";
 
 const USAGE = "cert update <names>|--all --cert <f> [--key <f>]";
 
-async function readOrRefuse(path: string, what: string): Promise<string> {
-  try {
-    return await readFile(path, "utf8");
-  } catch {
-    throw refusal(`Cannot read the ${what} file ${path}.`);
-  }
-}
-
 interface Swap {
   target: CertTarget;
   newCert: string;
   newKey: string;
-  oldCert: string;
-  oldKey: string;
+  /** The files as they were, to put back on failure. */
+  saved: Snapshot<"cert" | "key">;
   /** The new leaf's fingerprint, to confirm what is served. */
   fingerprint: string;
 }
@@ -41,12 +33,14 @@ async function validateAll(
   for (const target of targets) {
     const { name, record } = target;
     await refuseIfChanging(ctx, name);
-    const oldCert = await readOrRefuse(target.certPath, "current certificate");
-    const oldKey = await readOrRefuse(target.keyPath, "current key");
+    const saved = await snapshotFiles({
+      cert: { path: target.certPath, what: "current certificate" },
+      key: { path: target.keyPath, what: "current key" },
+    });
     try {
       const info = validateCertificate(ctx, {
         certPem,
-        keyPem: keyPem ?? oldKey,
+        keyPem: keyPem ?? saved.text.key,
         hostname: record.hostname,
       });
       step(
@@ -59,8 +53,7 @@ async function validateAll(
         target,
         newCert: info.certPem,
         newKey: info.keyPem,
-        oldCert,
-        oldKey,
+        saved,
         fingerprint: inspectChain(ctx, info.certPem, record.hostname).fingerprint,
       });
     } catch (err) {
@@ -73,10 +66,7 @@ async function validateAll(
 }
 
 async function restore(ctx: Context, swaps: Swap[], reloaded: boolean): Promise<void> {
-  for (const s of swaps) {
-    await writeFileAtomic(s.target.certPath, s.oldCert, 0o600);
-    await writeFileAtomic(s.target.keyPath, s.oldKey, 0o600);
-  }
+  for (const s of swaps) await s.saved.putBack();
   if (reloaded) await systemctl(ctx, "reload", "nginx");
 }
 

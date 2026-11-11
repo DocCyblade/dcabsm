@@ -17,6 +17,7 @@ const code = await run(process.argv.slice(2), {
   arch: process.arch,
   env: process.env,
   now: () => new Date(),
+  sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 });
 
 process.exitCode = code;

@@ -55,3 +55,14 @@ export async function startUnit(
   await ctx.runner.run("systemctl", ["reset-failed", unit]);
   await systemctl(ctx, verb, unit);
 }
+
+/** Runs a command and throws a CliError with its first stderr line if it fails. */
+export async function runChecked(ctx: Context, command: string, args: string[]) {
+  const res = await ctx.runner.run(command, args);
+  if (res.code !== 0) {
+    throw new CliError(
+      `${[command, ...args.slice(0, 1)].join(" ")} failed: ${firstLine(res.stderr, `exit ${res.code}`)}`,
+    );
+  }
+  return res;
+}

@@ -228,6 +228,40 @@ expect_ok dcabsm instance list
 expect_in "alpha"
 expect_in "beta"
 
+step "Restore alpha in place from its newest Backup"
+expect_ok dcabsm backup create alpha
+archive="$(ls -t /srv/dcabsm/backups/alpha/*.tar.gz | head -1)"
+expect_refusal "--from" dcabsm instance restore "$archive" --confirm alpha
+expect_ok dcabsm instance restore alpha --confirm alpha
+expect_in "Regrouped"
+wait_for 60 up alpha.test
+run info alpha.test
+expect_in "26.11.0"
+expect_ok dcabsm backup list alpha
+expect_in "pre-restore"
+[ ! -e /srv/dcabsm/instances/alpha/.changing-release ] || fail "the change marker was left behind by restore"
+up beta.test || fail "restoring alpha took beta down"
+
+step "Move beta to a new hostname without restarting it"
+echo "127.0.0.1 beta2.test" >> /etc/hosts
+before="$(systemctl show -p InvocationID --value dcabsm@beta)"
+expect_ok dcabsm instance set-hostname beta beta2.test --self-signed
+expect_in "OpenID"
+wait_for 30 up beta2.test
+[ "$(systemctl show -p InvocationID --value dcabsm@beta)" = "$before" ] || fail "set-hostname restarted beta"
+expect_ok dcabsm instance list
+expect_in "beta2.test"
+
+step "The Nightly run backs up every Instance and prunes"
+expect_ok dcabsm backup schedule alpha on
+expect_ok dcabsm host nightly
+expect_ok dcabsm backup list alpha
+expect_in "scheduled"
+expect_ok dcabsm backup list beta
+expect_in "scheduled"
+wait_for 30 up alpha.test
+wait_for 30 up beta2.test
+
 step "A failed upgrade rolls back by itself, and the start gate is cleaned up"
 echo "127.0.0.1 gamma.test" >> /etc/hosts
 expect_ok dcabsm instance create gamma --hostname gamma.test --self-signed --release 26.10.0
@@ -251,7 +285,7 @@ expect_ok dcabsm instance remove gamma --confirm gamma
 
 step "Remove beta; its Backups stay under a .removed- folder"
 expect_ok dcabsm instance remove beta --confirm beta
-wait_for 30 down beta.test
+wait_for 30 down beta2.test
 ls /srv/dcabsm/backups | grep -q '^beta\.removed-' || fail "beta's Backups were not kept under a .removed- folder"
 [ ! -e /srv/dcabsm/instances/beta ] || fail "beta's directory is still there"
 ! id dcabsm-beta > /dev/null 2>&1 || fail "beta's account is still there"

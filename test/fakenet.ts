@@ -82,7 +82,8 @@ function snapshot(dir: string, rel: string, into: Required<Pick<FakeArchive, "di
     return;
   }
   if (!isDir) {
-    into.files[rel] = readFileSync(full, "utf8");
+    // latin1 keeps every byte, so SQLite files survive the JSON round trip.
+    into.files[rel] = readFileSync(full, "latin1");
     return;
   }
   into.dirs.push(rel);
@@ -282,7 +283,7 @@ export function fakeNet(overrides: Partial<FakeNet> = {}): FakeNet {
         for (const d of archive.dirs ?? [])
           if (under(d)) mkdirSync(join(dest, d), { recursive: true });
         for (const [rel, text] of Object.entries(archive.files ?? {})) {
-          if (under(rel)) writeFileSync(join(dest, rel), text);
+          if (under(rel)) writeFileSync(join(dest, rel), text, "latin1");
         }
         return wanted.every((w) => archive.members.includes(w))
           ? ok()

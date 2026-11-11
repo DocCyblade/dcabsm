@@ -325,6 +325,35 @@ If npm can't be reached, it warns and still checks the rest.
 
 `backup-dir` is shown but can only be set by `host setup --backup-dir`. Any other key gets "unknown setting".
 
+### host nightly
+
+`host nightly`. The `dcabsm-nightly` service runs it at the `nightly-time` setting; `help` doesn't list it, and nobody needs to run it by hand (it works if you do).
+
+For each Instance in alphabetical order, one after another, it takes the lock for that Instance alone, waiting up to 10 minutes for another command to finish before skipping the Instance as failed. Then:
+
+- An Instance with scheduled Backups off is not backed up, but Retention still prunes it.
+- An Instance with a `.changing-release` marker fails.
+- An Instance that has never started has no data: it is skipped, and that is not a failure.
+- Otherwise it takes a `scheduled` Backup (a stopped Instance stays stopped), and only if that succeeds applies Retention. A failed Backup holds back pruning for that Instance.
+
+It carries on past a failure, ends with a summary and exits 1 if any Instance failed, so `systemctl` shows the unit as failed.
+
+```
+Nightly run: 3 Instances
+  ✓ family: 20261110T033000Z-scheduled-26.11.1.tar.gz; pruned 1
+  · fresh: has never started, so there is nothing to back up
+  ✗ test: Not enough space in /srv/dcabsm/backups for a backup of test (needs ~118 MB, 40 MB free). test was not stopped.
+
+Summary
+INSTANCE  RESULT   DETAIL
+family    ok       20261110T033000Z-scheduled-26.11.1.tar.gz; pruned 1
+fresh     skipped  has never started, so there is nothing to back up
+test      failed   Not enough space in /srv/dcabsm/backups for a backup of test ...
+  ✗ 1 backed up, 1 skipped (no data or schedule off), 1 failed
+```
+
+Read the summary with `journalctl -u dcabsm-nightly` (add `-b` for this boot or `--since yesterday`). Look for the `Summary` block and the `✗` lines; the result is also one `dcabsm: host nightly: ok` or `failed` line under `journalctl -t dcabsm`. A failing schedule also shows in `instance list`, which warns when an Instance with scheduled Backups on has no `scheduled` archive newer than 48 hours.
+
 ## instance
 
 ### instance list
@@ -464,7 +493,7 @@ Moves an Instance to a new hostname. If the current certificate covers the new h
   ✓ Nginx: nginx -t passed, reloaded
   ✓ Served certificate for kids.example.org confirmed
   · Devices must use https://kids.example.org now. Budgets on the old hostname stay in those browsers until removed.
-  ! OpenID: if this Instance uses it, update the hostname in Actual's OpenID settings and the provider's redirect URL.
+  ! OpenID login fails on the new name until Actual's OpenID settings and the provider's redirect URL are updated. Password login keeps working.
 ```
 
 Actual's OpenID settings still name the old hostname, so OpenID login fails until they and the provider are updated. Password login keeps working.
@@ -682,9 +711,10 @@ On every device
 
 - It keeps the current hostname, port, Instance settings and certificate, so a restore can't bring back an expired certificate or an old hostname.
 - If the archive is on another Release, the Instance moves to it, installing it if missing. Afterwards it suggests `instance upgrade` to move forward again.
+- Any Instance setting the archive's Release doesn't know is listed as `<key>: not used by <release>`.
 - If verification fails, DCABSM restores the `pre-restore` Backup automatically.
 - A stopped Instance returns to stopped.
-- A path given where the name belongs is refused, with a pointer to `--from`.
+- A path given where the name belongs is refused, with a pointer to `--from` (marked "coming in a later release" until it exists).
 
 ### instance restore --from
 
@@ -810,6 +840,8 @@ With nothing to delete: "Nothing to prune. Keeping newest 14 scheduled, 5 pre-up
 ```
   ✓ Scheduled backups off for test. Retention still prunes its old backups.
 ```
+
+`on` turns them back on: "Scheduled backups on for test."
 
 ## cert
 

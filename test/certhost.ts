@@ -2,7 +2,7 @@ import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fakeNet, type FakeNet } from "./fakenet.ts";
 import { harness, type Harness, type HarnessOptions } from "./helpers.ts";
-import type { TestCert } from "./certs.ts";
+import { makeCert, type TestCert } from "./certs.ts";
 
 /** A Host whose Nginx serves, after each reload, whatever certificate files are on disk. */
 export interface CertHost {
@@ -10,6 +10,8 @@ export interface CertHost {
   net: FakeNet;
   /** `nginx -t` fails with this message while set. */
   testFails?: string;
+  /** What `nginx -T` prints: the `server_name` lines Nginx already has. */
+  nginxDump: string;
   /** A reload leaves the old certificate served. */
   reloadIgnored: boolean;
   reloads: number;
@@ -24,6 +26,7 @@ export async function certHost(opts: HarnessOptions = {}): Promise<CertHost> {
   const host: CertHost = {
     net,
     reloadIgnored: false,
+    nginxDump: "",
     reloads: 0,
     add(name, hostname, cert) {
       const dir = join(host.h.ctx.paths.instances, name);
@@ -51,6 +54,16 @@ export async function certHost(opts: HarnessOptions = {}): Promise<CertHost> {
     ...opts,
     net,
     runner(command, args) {
+      if (command === "openssl") {
+        // `req -x509 ... -subj /CN=<host>`: a real certificate for that name.
+        const made = makeCert(args[args.indexOf("-subj") + 1]!.slice(4));
+        writeFileSync(args[args.indexOf("-keyout") + 1]!, made.key);
+        writeFileSync(args[args.indexOf("-out") + 1]!, made.cert);
+        return { code: 0, stdout: "", stderr: "" };
+      }
+      if (command === "nginx" && args[0] === "-T") {
+        return { code: 0, stdout: host.nginxDump, stderr: "" };
+      }
       if (command === "nginx" && args[0] === "-t") {
         return host.testFails
           ? { code: 1, stdout: "", stderr: host.testFails }
