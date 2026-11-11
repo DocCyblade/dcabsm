@@ -43,6 +43,12 @@ export async function restoreData(ctx: Context, name: string, archive: string): 
   } finally {
     await rm(stage, { recursive: true, force: true });
   }
+  await chownData(ctx, name);
+}
+
+/** Sets ownership of the restored directories from the account name (spec 7.4). */
+export async function chownData(ctx: Context, name: string): Promise<void> {
+  const dir = instanceDir(ctx, name);
   const account = accountOf(name);
   const chown = await ctx.runner.run("chown", [
     "-R",

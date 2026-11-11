@@ -682,6 +682,7 @@ On every device
 
 - It keeps the current hostname, port, Instance settings and certificate, so a restore can't bring back an expired certificate or an old hostname.
 - If the archive is on another Release, the Instance moves to it, installing it if missing. Afterwards it suggests `instance upgrade` to move forward again.
+- Any Instance setting the archive's Release doesn't know is listed as `<key>: not used by <release>`.
 - If verification fails, DCABSM restores the `pre-restore` Backup automatically.
 - A stopped Instance returns to stopped.
 - A path given where the name belongs is refused, with a pointer to `--from`.

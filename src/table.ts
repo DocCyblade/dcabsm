@@ -13,6 +13,7 @@ import { instanceCreate } from "./instance/create.ts";
 import { instanceLogs, instanceRestart, instanceStart, instanceStop } from "./instance/controls.ts";
 import { instanceList, instanceShow } from "./instance/list.ts";
 import { instanceRemove } from "./instance/remove.ts";
+import { instanceRestore } from "./instance/restore.ts";
 import { instanceUpgrade } from "./instance/upgrade.ts";
 import { instanceResetPassword } from "./instance/reset-password.ts";
 import { instanceSet, instanceSettings, instanceUnset } from "./instance/settings.ts";
@@ -210,6 +211,7 @@ export const table: Noun[] = [
         usage: "restore <name> [<archive>] [--confirm <name>] | restore --from <archive>",
         summary: "Restore an Instance from a Backup, or rebuild one from an archive",
         changes: true,
+        run: instanceRestore,
       },
       {
         name: "clone",
