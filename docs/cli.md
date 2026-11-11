@@ -579,6 +579,7 @@ On every device
   · Open tabs show Actual's banner "A new version of Actual is available". Click Update now, or reload twice.
 ```
 
+- **The marker.** Before the switch, DCABSM writes a `.changing-release` marker in the Instance directory and removes it once the new Release is verified. It prints no line for either. If a change is interrupted, the marker stays and the Instance shows `CHANGING` (spec 6.6).
 - **Target.** The default is the latest stable Release on npm. `--to <v>` picks another. If npm can't be reached, it fails and lists the installed Releases to use with `--to`.
 - **Never backwards.** An older target is refused, with a pointer to `instance rollback`. An Instance already on the target is skipped.
 - **Failure.** If verification fails, DCABSM rolls that Instance back automatically, from its Pre-upgrade backup, with nothing lost. It stops there and leaves the rest untouched:
