@@ -50,17 +50,17 @@ export async function planPrune(
   counts: Counts,
 ): Promise<ArchiveInfo[]> {
   const archives = await listArchives(ctx, name);
-  const doomed: ArchiveInfo[] = [];
+  const toDelete: ArchiveInfo[] = [];
   for (const kind of COUNTED_KINDS) {
     const newestFirst = archives.filter((a) => a.kind === kind).reverse();
-    doomed.push(...newestFirst.slice(Math.max(1, counts[kind])));
+    toDelete.push(...newestFirst.slice(Math.max(1, counts[kind])));
   }
-  return doomed.sort((a, b) => a.stamp.localeCompare(b.stamp));
+  return toDelete.sort((a, b) => a.stamp.localeCompare(b.stamp));
 }
 
 /** Applies Retention to one Instance and returns what it deleted. The caller holds the lock. */
 export async function pruneInstance(ctx: Context, name: string): Promise<ArchiveInfo[]> {
-  const doomed = await planPrune(ctx, name, await keepCounts(ctx));
-  for (const a of doomed) await rm(a.path, { force: true });
-  return doomed;
+  const toDelete = await planPrune(ctx, name, await keepCounts(ctx));
+  for (const a of toDelete) await rm(a.path, { force: true });
+  return toDelete;
 }
