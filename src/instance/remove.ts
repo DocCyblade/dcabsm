@@ -11,6 +11,7 @@ import { step } from "../output.ts";
 import { confirmName } from "../prompt.ts";
 import type { Invocation } from "../table.ts";
 import { stopInstance } from "./controls.ts";
+import { vhostPath } from "./files.ts";
 import { accountOf, checkName, instanceDir, refuseIfChanging, requireInstance } from "./record.ts";
 
 /**
@@ -18,7 +19,7 @@ import { accountOf, checkName, instanceDir, refuseIfChanging, requireInstance } 
  * back and nothing is reloaded.
  */
 async function removeVhost(ctx: Context, name: string): Promise<void> {
-  const path = join(instanceDir(ctx, name), "nginx", "vhost.conf");
+  const path = vhostPath(ctx, name);
   const old = await readFile(path, "utf8").catch(() => undefined);
   await rm(path, { force: true });
   try {

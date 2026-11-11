@@ -5,20 +5,19 @@ import { backupRoot, listArchives, readManifest, type Manifest } from "../backup
 import { checkSpace, RUNNING_STATES, takeBackup } from "../backup/create.ts";
 import type { Context } from "../context.ts";
 import { CliError, errorMessage, refusal } from "../errors.ts";
-import { writeFileAtomic } from "../fsutil.ts";
-import { hostHasIpv6 } from "../host/owned.ts";
 import { systemctl } from "../host/system.ts";
 import { logChange } from "../log.ts";
-import { step } from "../output.ts";
+import { formatTime, step } from "../output.ts";
 import { confirmName } from "../prompt.ts";
 import { installRelease } from "../release/install.ts";
 import { compareText } from "../release/semver.ts";
 import type { Invocation } from "../table.ts";
 import { beforeRestoreAdvice, deviceAdvice } from "./device-advice.ts";
-import { vhostConf } from "./files.ts";
+import { writeVhost } from "./files.ts";
 import { unitStateOf } from "./list.ts";
 import { regroup } from "./regroup.ts";
 import {
+  accountOf,
   checkName,
   instanceDir,
   refuseIfChanging,
@@ -37,9 +36,6 @@ import { startVerified } from "./verify.ts";
 import { planIfMissing } from "./upgrade-plan.ts";
 
 const USAGE = "Usage: dcabsm instance restore <name> [<archive>] [--confirm <name>]";
-
-/** `2026-11-07 03:30 UTC` from a manifest's `2026-11-07T03:30:00Z`. */
-const formatTime = (iso: string): string => `${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC`;
 
 /** The archive to restore: the one given, or the newest in the Instance's backup directory. */
 async function pickArchive(ctx: Context, name: string, given: string | undefined) {
@@ -67,12 +63,6 @@ function reportUnusedSettings(ctx: Context, record: InstanceRecord, release: str
       step(ctx, "info", `${def.key}: not used by ${release}`);
     }
   }
-}
-
-/** Regenerates `vhost.conf` from the record. It is the same text unless it was edited, so no reload. */
-async function writeVhost(ctx: Context, name: string, record: InstanceRecord): Promise<void> {
-  const path = join(instanceDir(ctx, name), "nginx", "vhost.conf");
-  await writeFileAtomic(path, vhostConf(name, record, await hostHasIpv6(ctx)), 0o600);
 }
 
 interface Job {
@@ -112,7 +102,21 @@ async function restoreInstance(ctx: Context, job: Job): Promise<void> {
 
   await systemctl(ctx, "stop", unit);
   step(ctx, "done", `Stopped ${name}`);
-  const file = await takeBackup(ctx, name, "pre-restore");
+  let file: string;
+  try {
+    file = await takeBackup(ctx, name, "pre-restore");
+  } catch (err) {
+    // Nothing has changed yet, so a running Instance goes back up as it was.
+    if (job.wasUp) {
+      try {
+        await systemctl(ctx, "start", unit);
+        step(ctx, "info", `${name} was running before the restore, so it is started again`);
+      } catch (again) {
+        step(ctx, "warn", `Could not start ${name} again: ${errorMessage(again)}`);
+      }
+    }
+    throw err;
+  }
   const backup = join(await backupRoot(ctx), name, file);
   await writeMarker(ctx, name, { operation: "restore", from, to, backup, restoringData: true });
 
@@ -121,13 +125,15 @@ async function restoreInstance(ctx: Context, job: Job): Promise<void> {
     step(
       ctx,
       "done",
-      "Replaced data, server-files and user-files; ownership set for " + `dcabsm-${name}`,
+      `Replaced data, server-files and user-files; ownership set for ${accountOf(name)}`,
     );
     const dir = instanceDir(ctx, name);
     const count = await regroup(join(dir, "server-files"), join(dir, "user-files"));
     await chownData(ctx, name);
     step(ctx, "done", `Regrouped ${count} Budget file${count === 1 ? "" : "s"}`);
     await switchRelease(ctx, name, record, to);
+    // The same text as before unless someone edited it by hand, and the hostname and certificate
+    // are unchanged, so Nginx needs no reload.
     await writeVhost(ctx, name, record);
     step(ctx, "done", `On Release ${to}, config.json and vhost.conf regenerated`);
     await startThroughGate(ctx, job, to);
@@ -174,7 +180,7 @@ export async function instanceRestore({ ctx, args }: Invocation): Promise<void> 
   if (name.includes("/") || name.endsWith(".tar.gz")) {
     throw refusal(
       `${name} looks like an archive, but a restore in place takes an Instance name first.`,
-      `To rebuild an Instance from an archive: sudo dcabsm instance restore --from ${name}`,
+      `To rebuild an Instance from an archive: sudo dcabsm instance restore --from ${name} (coming in a later release)`,
     );
   }
   checkName(name);

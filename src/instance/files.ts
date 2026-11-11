@@ -2,7 +2,7 @@ import { join } from "node:path";
 import type { Context } from "../context.ts";
 import { CliError, firstLine } from "../errors.ts";
 import { writeFileAtomic } from "../fsutil.ts";
-import { listen443 } from "../host/owned.ts";
+import { hostHasIpv6, listen443 } from "../host/owned.ts";
 import { accountOf, instanceDir, logicalDir, type InstanceRecord } from "./record.ts";
 import { bodyLimitMb, SETTINGS, usedBy } from "./setting-table.ts";
 
@@ -48,6 +48,23 @@ export async function writeConfigJson(
   if (res.code !== 0) {
     throw new CliError(`chown failed: ${firstLine(res.stderr, `exit ${res.code}`)}`);
   }
+}
+
+/** Where an Instance's `vhost.conf` is. */
+export const vhostPath = (ctx: Context, name: string): string =>
+  join(instanceDir(ctx, name), "nginx", "vhost.conf");
+
+/** Writes `vhost.conf` from the record. The caller tests and reloads Nginx when it needs to. */
+export async function writeVhost(
+  ctx: Context,
+  name: string,
+  record: InstanceRecord,
+): Promise<void> {
+  await writeFileAtomic(
+    vhostPath(ctx, name),
+    vhostConf(name, record, await hostHasIpv6(ctx)),
+    0o600,
+  );
 }
 
 /** The vhost (spec 5.2): the same template for every Instance. */

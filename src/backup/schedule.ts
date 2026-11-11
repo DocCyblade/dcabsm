@@ -1,6 +1,5 @@
-import { writeFileAtomic } from "../fsutil.ts";
 import { refusal } from "../errors.ts";
-import { checkName, recordPath, requireInstance } from "../instance/record.ts";
+import { checkName, requireInstance, writeRecord } from "../instance/record.ts";
 import { step } from "../output.ts";
 import type { Invocation } from "../table.ts";
 
@@ -13,12 +12,7 @@ export async function backupSchedule({ ctx, args }: Invocation): Promise<void> {
   }
   checkName(name);
   const record = await requireInstance(ctx, name);
-  const path = recordPath(ctx, name);
-  await writeFileAtomic(
-    path,
-    `${JSON.stringify({ ...record, scheduledBackups: state === "on" }, null, 2)}\n`,
-    0o600,
-  );
+  await writeRecord(ctx, name, { ...record, scheduledBackups: state === "on" });
   step(
     ctx,
     "done",

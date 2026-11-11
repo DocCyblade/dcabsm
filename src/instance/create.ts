@@ -1,12 +1,18 @@
-import { chmod, rm, symlink } from "node:fs/promises";
+import { rm, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { parseCommand } from "../args.ts";
-import { validateCertificateFiles, type CertificateInfo } from "../cert.ts";
+import {
+  askForCertificate,
+  hostnameInUse,
+  reportCertificate,
+  writeCertificate,
+  type CertSource,
+} from "../certs/provide.ts";
+import { validateCertificateFiles } from "../cert.ts";
 import type { Context } from "../context.ts";
-import { Cancelled, CliError, errorMessage, firstLine, refusal } from "../errors.ts";
-import { ensureDir, exists, writeFileAtomic } from "../fsutil.ts";
-import { hostHasIpv6 } from "../host/owned.ts";
-import { nginxTestFailure, systemctl } from "../host/system.ts";
+import { Cancelled, CliError, errorMessage, refusal } from "../errors.ts";
+import { ensureDir, exists } from "../fsutil.ts";
+import { nginxTestFailure, runChecked, systemctl } from "../host/system.ts";
 import { step } from "../output.ts";
 import { confirm } from "../prompt.ts";
 import {
@@ -16,7 +22,7 @@ import {
   planRelease,
 } from "../release/install.ts";
 import type { Invocation } from "../table.ts";
-import { vhostConf, writeConfigJson } from "./files.ts";
+import { writeConfigJson, writeVhost } from "./files.ts";
 import {
   accountOf,
   checkName,
@@ -25,12 +31,11 @@ import {
   instanceNames,
   readRecord,
   unitName,
+  writeRecord,
   type InstanceRecord,
 } from "./record.ts";
 import { runResetTool } from "./reset-password.ts";
 import { startVerified } from "./verify.ts";
-
-const SELF_SIGNED_DAYS = 397;
 
 /** A lowercase DNS name: dot-separated labels, no wildcard, no trailing dot, not an IP address. */
 const LABEL = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
@@ -50,45 +55,6 @@ export function checkHostname(hostname: string): void {
   }
 }
 
-async function run(ctx: Context, command: string, args: string[]) {
-  const res = await ctx.runner.run(command, args);
-  if (res.code !== 0) {
-    throw new CliError(
-      `${[command, ...args.slice(0, 1)].join(" ")} failed: ${firstLine(res.stderr, `exit ${res.code}`)}`,
-    );
-  }
-  return res;
-}
-
-/** Hostnames in every `server_name` that Nginx loads. */
-async function nginxHostnames(ctx: Context): Promise<Set<string>> {
-  const res = await ctx.runner.run("nginx", ["-T"]);
-  if (res.code !== 0) {
-    throw new CliError(
-      `nginx -T failed: ${firstLine(res.stderr, `exit ${res.code}`)}`,
-      "Fix the Nginx configuration first, then run again.",
-    );
-  }
-  const names = new Set<string>();
-  for (const m of res.stdout.matchAll(/^\s*server_name\s+([^;]+);/gm)) {
-    for (const n of m[1]!.trim().split(/\s+/)) names.add(n.toLowerCase());
-  }
-  return names;
-}
-
-/** Another Instance or Nginx already uses the hostname: why, or undefined (spec 4.6). */
-export async function hostnameInUse(ctx: Context, hostname: string): Promise<string | undefined> {
-  for (const name of await instanceNames(ctx)) {
-    if ((await readRecord(ctx, name))?.hostname === hostname) {
-      return `Instance ${name} already uses ${hostname}.`;
-    }
-  }
-  if ((await nginxHostnames(ctx)).has(hostname)) {
-    return `Nginx already serves ${hostname}. Nginx only warns about duplicate names, so DCABSM refuses.`;
-  }
-  return undefined;
-}
-
 /** The first port from 15127 that is in no Instance record and not listening (spec 4.3). */
 async function freePort(ctx: Context): Promise<number> {
   const taken = new Set<number>();
@@ -105,9 +71,6 @@ async function freePort(ctx: Context): Promise<number> {
   while (taken.has(port)) port++;
   return port;
 }
-
-/** Where an Instance's certificate comes from. */
-export type CertSource = { kind: "self-signed" } | { kind: "given"; info: CertificateInfo };
 
 /** The certificate files named on the command line. */
 interface CertFiles {
@@ -182,22 +145,6 @@ async function chooseCertificate(ctx: Context, req: CreateRequest): Promise<Cert
   return askForCertificate(ctx, req.hostname);
 }
 
-/** With no certificate given: asks on a terminal for a self-signed one, or refuses (spec 4.6 step 3). */
-export async function askForCertificate(ctx: Context, hostname: string): Promise<CertSource> {
-  if (!ctx.io.interactive) {
-    throw refusal(
-      "No terminal to ask for a certificate on.",
-      "Re-run with --cert <f> --key <f>, or --self-signed.",
-    );
-  }
-  ctx.io.out(`No certificate given for ${hostname}. Every Instance must have one.`);
-  const answer = (
-    await ctx.io.ask("  [1] self-signed now  [2] cancel (re-run with --cert/--key): ")
-  ).trim();
-  if (answer !== "1") throw new Cancelled();
-  return { kind: "self-signed" };
-}
-
 /** The newest installed Release, or `--release`; installs it first if it is missing. */
 async function resolveRelease(ctx: Context, wanted: string | undefined): Promise<string> {
   const installed = await installedReleases(ctx);
@@ -231,7 +178,7 @@ async function makeDirectories(ctx: Context, name: string): Promise<void> {
   ];
   for (const { path, mode, owner } of dirs) {
     await ensureDir(path, mode);
-    await run(ctx, "chown", [owner, path]);
+    await runChecked(ctx, "chown", [owner, path]);
   }
 }
 
@@ -243,62 +190,8 @@ async function writeConfigFiles(
 ): Promise<void> {
   const dir = instanceDir(ctx, name);
   await symlink(join(ctx.paths.releases, release), join(dir, "release"));
-  await writeFileAtomic(
-    join(dir, "config", "instance.json"),
-    `${JSON.stringify(record, null, 2)}\n`,
-    0o600,
-  );
+  await writeRecord(ctx, name, record);
   await writeConfigJson(ctx, name, record, release);
-}
-
-/** Puts `cert.pem` and `key.pem` in the Instance's `nginx/`, root-only (spec 5.5). */
-export async function writeCertificate(
-  ctx: Context,
-  name: string,
-  hostname: string,
-  source: CertSource,
-): Promise<void> {
-  const nginx = join(instanceDir(ctx, name), "nginx");
-  if (source.kind === "given") {
-    await writeFileAtomic(join(nginx, "cert.pem"), source.info.certPem, 0o600);
-    await writeFileAtomic(join(nginx, "key.pem"), source.info.keyPem, 0o600);
-    return;
-  }
-  await run(ctx, "openssl", [
-    "req",
-    "-x509",
-    "-newkey",
-    "ec",
-    "-pkeyopt",
-    "ec_paramgen_curve:P-256",
-    "-nodes",
-    "-days",
-    String(SELF_SIGNED_DAYS),
-    "-subj",
-    `/CN=${hostname}`,
-    "-addext",
-    `subjectAltName=DNS:${hostname}`,
-    "-keyout",
-    join(nginx, "key.pem"),
-    "-out",
-    join(nginx, "cert.pem"),
-  ]);
-  for (const file of ["key.pem", "cert.pem"]) await chmod(join(nginx, file), 0o600);
-}
-
-export function reportCertificate(ctx: Context, hostname: string, source: CertSource): void {
-  if (source.kind === "given") {
-    step(ctx, "done", `Certificate for ${hostname}, ${source.info.daysLeft} days left`);
-    for (const warning of source.info.warnings) step(ctx, "warn", warning);
-    return;
-  }
-  step(ctx, "done", `Certificate for ${hostname}, ${SELF_SIGNED_DAYS} days left (self-signed)`);
-  ctx.io.out(
-    "  Self-signed: browsers warn on each device, and may warn again later. Actual works after you proceed,",
-  );
-  ctx.io.out(
-    "  but offline use and installing as an app need a certificate the device trusts. Bring one later: sudo dcabsm cert update <name> --cert <file> --key <file>",
-  );
 }
 
 /** Steps 5 and 6 of spec 4.6: account, files, `nginx -t` and reload. Nothing of it stays on failure. */
@@ -311,7 +204,7 @@ async function createFiles(
 ): Promise<void> {
   const { name, hostname } = req;
   const account = accountOf(name);
-  await run(ctx, "useradd", [
+  await runChecked(ctx, "useradd", [
     "--system",
     "--user-group",
     "--no-create-home",
@@ -327,11 +220,7 @@ async function createFiles(
     await makeDirectories(ctx, name);
     await writeConfigFiles(ctx, name, record, release);
     await writeCertificate(ctx, name, hostname, source);
-    await writeFileAtomic(
-      join(instanceDir(ctx, name), "nginx", "vhost.conf"),
-      vhostConf(name, record, await hostHasIpv6(ctx)),
-      0o600,
-    );
+    await writeVhost(ctx, name, record);
     step(ctx, "done", `Instance on Release ${release}, port ${record.port}`);
     reportCertificate(ctx, hostname, source);
 
