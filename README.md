@@ -6,6 +6,8 @@ Each Actual server is an Instance, with its own data, account, port, hostname an
 
 DCABSM is not part of the Actual project, and Actual's maintainers don't support it.
 
+> **Alpha: still being developed.** DCABSM has no release yet. Commands, flags and behaviour can change without notice, and it is not ready for data you can't afford to lose. Try it on a test Host first.
+
 ## Here be dragons
 
 Read this before you upgrade, roll back or restore an Instance. Your mileage may vary.
@@ -129,7 +131,7 @@ A notice goes at the top of this README, with the new key's fingerprint. Every H
 
 ## First steps
 
-1. **Set up the Host.** This installs Nginx and `openssl`, writes DCABSM's systemd units and Nginx files, and installs the latest Release of Actual. It checks everything that could make it refuse before it changes anything, shows its plan, and asks once.
+1. **Set up the Host.** This installs Nginx, `openssl` and `xz-utils`, writes DCABSM's systemd units and Nginx files, and installs the latest Release of Actual. It checks everything that could make it refuse before it changes anything, shows its plan, and asks once.
 
    ```
    sudo dcabsm host setup
@@ -147,7 +149,7 @@ A notice goes at the top of this README, with the new key's fingerprint. Every H
 
    With no certificate, `--self-signed` makes one. Browsers then warn on each device, and may warn again later, and Actual works after you proceed, but offline use and installing as an app need a certificate the device trusts. Bring one later with `cert update`.
 
-4. **Open `https://budget.example.org` straight away** and set the server password in Actual. Until it is set, whoever opens the hostname first sets it, so either create the Instance before DNS points at the Host or set the password at once.
+4. **Set the server password.** On a terminal, `instance create` offers to set it as its last step. If you skip the offer, **open `https://budget.example.org` straight away** and set it in Actual. Until it is set, whoever opens the hostname first sets it, so either create the Instance before DNS points at the Host or set the password at once.
 
 5. **Check on things.**
 

@@ -5,6 +5,7 @@ import type { Context } from "../context.ts";
 import { refusal } from "../errors.ts";
 import { instanceListFooter } from "../host/updates.ts";
 import { listArchives, stampTime } from "../backup/archive.ts";
+import { certColumn } from "../certs/probe.ts";
 import { formatColumns } from "../columns.ts";
 import { step } from "../output.ts";
 import { releaseNodeMajor } from "../release/install.ts";
@@ -18,6 +19,7 @@ import {
   isChanging,
   readRecord,
   requireInstance,
+  unitName,
   type InstanceRecord,
 } from "./record.ts";
 
@@ -48,6 +50,8 @@ export interface InstanceRow {
   state: InstanceState;
   release: string;
   record: InstanceRecord;
+  /** Days left on the certificate file, such as `212d` or `300d self-signed`. */
+  cert: string;
   /** `off`, `none`, or the newest scheduled Backup as `MM-DD HH:MM UTC`. */
   lastScheduled: string;
   /** Scheduled Backups are on and none is newer than 48 hours (spec 7.3). */
@@ -76,7 +80,7 @@ export async function stateOf(ctx: Context, name: string): Promise<InstanceState
 
 /** What `systemctl is-active` says about the unit (`stopped` when inactive). */
 export async function unitStateOf(ctx: Context, name: string): Promise<InstanceState> {
-  const res = await ctx.runner.run("systemctl", ["is-active", `dcabsm@${name}`]);
+  const res = await ctx.runner.run("systemctl", ["is-active", unitName(name)]);
   const state = res.stdout.trim();
   if (state === "" || state === "inactive") return "stopped";
   return UNIT_STATES.includes(state) ? (state as InstanceState) : "unknown";
@@ -96,6 +100,7 @@ async function rowFor(ctx: Context, name: string, record: InstanceRecord): Promi
     state: await stateOf(ctx, name),
     release: await releaseOf(ctx, name),
     record,
+    cert: await certColumn(ctx, name, record.hostname),
     ...(await scheduleOf(ctx, name, record)),
   };
 }
@@ -103,13 +108,14 @@ async function rowFor(ctx: Context, name: string, record: InstanceRecord): Promi
 /** The overview table, one line per Instance. Later tickets add columns and a footer. */
 export function renderInstanceTable(rows: InstanceRow[]): string[] {
   const table = [
-    ["INSTANCE", "STATE", "RELEASE", "HOSTNAME", "PORT", "LAST SCHEDULED"],
+    ["INSTANCE", "STATE", "RELEASE", "HOSTNAME", "PORT", "CERT", "LAST SCHEDULED"],
     ...rows.map((r) => [
       r.name,
       r.state,
       r.release,
       r.record.hostname,
       String(r.record.port),
+      r.cert,
       r.lastScheduled,
     ]),
   ];

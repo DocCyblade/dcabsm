@@ -1,13 +1,19 @@
 import type { Context } from "./context.ts";
 import { hostDoctor } from "./host/doctor.ts";
+import { hostSet, hostSettings } from "./host/settings.ts";
 import { hostSetup } from "./host/setup.ts";
 import { hostCheckUpdates } from "./host/updates.ts";
 import { releaseInstall } from "./release/install.ts";
 import { backupCreate } from "./backup/create.ts";
 import { backupList } from "./backup/list.ts";
+import { backupPrune } from "./backup/prune.ts";
+import { certTest } from "./certs/test.ts";
+import { certUpdate } from "./certs/update.ts";
 import { instanceCreate } from "./instance/create.ts";
 import { instanceLogs, instanceRestart, instanceStart, instanceStop } from "./instance/controls.ts";
 import { instanceList, instanceShow } from "./instance/list.ts";
+import { instanceRemove } from "./instance/remove.ts";
+import { instanceUpgrade } from "./instance/upgrade.ts";
 import { instanceResetPassword } from "./instance/reset-password.ts";
 import { instanceSet, instanceSettings, instanceUnset } from "./instance/settings.ts";
 import { releaseList } from "./release/list.ts";
@@ -15,6 +21,7 @@ import { selfMigrate } from "./self/migrations.ts";
 import { selfRefresh } from "./self/refresh.ts";
 import { selfUpdate } from "./self/update.ts";
 import { releasePrune } from "./release/prune.ts";
+import { releaseUpdateNode } from "./release/update-node.ts";
 import { versionLine } from "./version.ts";
 
 export interface Invocation {
@@ -78,12 +85,18 @@ export const table: Noun[] = [
         summary: "Look for a newer Actual Release, Node patch and DCABSM version",
         run: hostCheckUpdates,
       },
-      { name: "settings", usage: "settings", summary: "Show the Host settings" },
+      {
+        name: "settings",
+        usage: "settings",
+        summary: "Show the Host settings",
+        run: hostSettings,
+      },
       {
         name: "set",
         usage: "set <key> <value>",
         summary: "Change one Host setting",
         changes: true,
+        run: hostSet,
       },
       {
         name: "nightly",
@@ -107,7 +120,7 @@ export const table: Noun[] = [
       {
         name: "create",
         usage:
-          "create <name> --hostname <host> (--cert <f> --key <f> | --self-signed) [--release <v>]",
+          "create <name> --hostname <host> (--cert <f> --key <f> | --self-signed) [--release <v>] [--yes]",
         summary: "Create an Instance",
         changes: true,
         run: instanceCreate,
@@ -117,6 +130,7 @@ export const table: Noun[] = [
         usage: "remove <name> [--confirm <name>]",
         summary: "Take a final Backup, then delete the Instance",
         changes: true,
+        run: instanceRemove,
       },
       {
         name: "start",
@@ -183,6 +197,7 @@ export const table: Noun[] = [
         usage: "upgrade <names>|--all [--to <v>] [--yes]",
         summary: "Move Instances to a newer Release",
         changes: true,
+        run: instanceUpgrade,
       },
       {
         name: "rollback",
@@ -221,6 +236,7 @@ export const table: Noun[] = [
         usage: "prune [<names>|--all] [--dry-run]",
         summary: "Apply Retention by hand",
         changes: (args) => !args.includes("--dry-run"),
+        run: backupPrune,
       },
       {
         name: "schedule",
@@ -233,12 +249,18 @@ export const table: Noun[] = [
   {
     name: "cert",
     verbs: [
-      { name: "test", usage: "test [<names>|--all]", summary: "Check what each hostname serves" },
+      {
+        name: "test",
+        usage: "test [<names>|--all]",
+        summary: "Check what each hostname serves",
+        run: certTest,
+      },
       {
         name: "update",
         usage: "update <names>|--all --cert <f> [--key <f>]",
         summary: "Swap in a new certificate",
         changes: true,
+        run: certUpdate,
       },
     ],
   },
@@ -270,6 +292,7 @@ export const table: Noun[] = [
         usage: "update-node [--yes]",
         summary: "Install a Node patch and restart the Instances on it",
         changes: true,
+        run: releaseUpdateNode,
       },
     ],
   },

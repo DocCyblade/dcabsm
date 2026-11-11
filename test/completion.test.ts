@@ -191,7 +191,8 @@ describe.skipIf(!bash5 || !bashCompletion)("through bash-completion's sudo, in b
       expect(viaSudo("dcabsm", v.noun, "")).toContain(v.verb);
       expect(viaSudo("dcabsm", v.noun, v.verb, "-")).toEqual([...v.flags].sort());
     }
-  });
+    // One real bash per verb, so the time grows with the table.
+  }, 60_000);
 
   it("completes fixture Instance names and Release versions after sudo dcabsm", () => {
     expect(viaSudo("dcabsm", "instance", "show", "")).toEqual(["alpha", "beta"]);

@@ -42,10 +42,11 @@ const SITE = "/etc/nginx/sites-enabled/nodejs";
 const JOB = "/etc/cron.daily/confconsole-dehydrated";
 
 const restorePieces = async (host: FakeHost) => {
-  await put("/etc/nginx/sites-available/nodejs", "server {}\n");
+  await put("/etc/nginx/sites-available/nodejs", "server { listen 443 ssl default_server; }\n");
   await mkdir(h.ctx.paths.under("/etc/nginx/sites-enabled"), { recursive: true });
   await rm(h.ctx.paths.under(SITE), { force: true });
-  await symlink("/etc/nginx/sites-available/nodejs", h.ctx.paths.under(SITE));
+  // Relative, so it resolves under the temporary root as TurnKey's absolute link does on a Host.
+  await symlink("../sites-available/nodejs", h.ctx.paths.under(SITE));
   host.enabled.add("pm2-node");
   host.active.add("pm2-node");
   await put(JOB, "#!/bin/sh\n", 0o755);
@@ -54,7 +55,7 @@ const restorePieces = async (host: FakeHost) => {
 /** A TurnKey appliance after (or before) its first boot, as the faked runner and the temporary root show it. */
 async function appliance(kind: Appliance, opts: Options = {}): Promise<FakeHost> {
   const host = fakeHost();
-  for (const pkg of opts.packages ?? [`turnkey-${kind}`]) host.installed.add(pkg);
+  for (const pkg of opts.packages ?? [`turnkey-${kind}-19.0`]) host.installed.add(pkg);
   const firstBoot = opts.firstBoot ?? "done";
   if (firstBoot === "fence") host.active.add("turnkey-init-fence");
   h = await harness({
@@ -107,11 +108,17 @@ describe("host setup on TurnKey Node.js", () => {
     );
     expect(await hasEntry(SITE)).toBe(false);
     expect(await readFile(h.ctx.paths.under("/etc/nginx/sites-available/nodejs"), "utf8")).toBe(
-      "server {}\n",
+      "server { listen 443 ssl default_server; }\n",
     );
     expect(host.enabled.has("pm2-node")).toBe(false);
     expect(host.active.has("pm2-node")).toBe(false);
     expect(await modeOf(JOB)).toBe(0o644);
+  });
+
+  it("writes DCABSM's catch-all once TurnKey's own default server is disabled", async () => {
+    const { code } = await turnkey("nodejs", ["host", "setup", "--yes"]);
+    expect(code).toBe(0);
+    expect(await hasEntry("/etc/nginx/conf.d/dcabsm-default.conf")).toBe(true);
   });
 
   it("changes nothing when the plan is declined", async () => {
@@ -189,7 +196,7 @@ describe("host setup refusals on TurnKey", () => {
 
   it("refuses when the version file and the package disagree", async () => {
     const { code, host } = await turnkey("nodejs", ["host", "setup", "--yes"], {
-      packages: ["turnkey-core"],
+      packages: ["turnkey-core-19.0"],
     });
     expect(code).toBe(2);
     expect(h.err.join("\n")).toContain("Only TurnKey Core and Node.js are supported");
@@ -254,7 +261,7 @@ describe("host doctor on TurnKey", () => {
 
   it("notes webmin-nginx", async () => {
     await appliance("core", {
-      packages: ["turnkey-core", "webmin-nginx"],
+      packages: ["turnkey-core-19.0", "webmin-nginx"],
     });
     expect(await run(["host", "setup", "--yes"], h.ctx)).toBe(0);
     h.out.length = 0;

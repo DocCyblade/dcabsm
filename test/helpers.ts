@@ -90,6 +90,17 @@ export async function harness(opts: HarnessOptions = {}): Promise<Harness> {
       if (res) return res;
       throw new Error(`unexpected fetch: ${url}`);
     },
+    async servedChain(_address, _port, servername) {
+      elapsedMs += opts.clockStepMs ?? 0;
+      const pem = net.served[servername];
+      if (pem === undefined) throw new Error("connection refused");
+      return pem;
+    },
+    async resolve(hostname) {
+      const addresses = net.dns[hostname];
+      if (!addresses) throw new Error("ENOTFOUND");
+      return addresses;
+    },
   };
   const io: Io = {
     out: (line) => out.push(line),

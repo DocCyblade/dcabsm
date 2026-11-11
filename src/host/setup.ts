@@ -33,7 +33,11 @@ import {
   writeVerified,
 } from "./owned.ts";
 
-const PACKAGES = ["nginx", "openssl"];
+// xz-utils unpacks Node's .tar.xz; a TurnKey Core appliance has no xz.
+const PACKAGES = ["nginx", "openssl", "xz-utils"];
+
+const sayList = (names: string[]) =>
+  names.length < 2 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 
 interface Dir {
   path: string;
@@ -112,12 +116,10 @@ export async function hostSetup({ ctx, args }: Invocation): Promise<void> {
   const newOverrides = overrides.filter((o) => !stored?.unsupportedHost?.overrides.includes(o));
   const needConfig = stored === undefined || newOverrides.length > 0;
   const nightlyTime = stored?.nightlyTime ?? defaultHostConfig(backupDir).nightlyTime;
-  const inspected = await inspectOwnedFiles(
-    ctx,
-    await hostOwnedFiles(ctx, nightlyTime),
-    stored?.ownedFiles ?? {},
-  );
-  const ownedWork = pending(inspected);
+  const inspectOwned = async () =>
+    inspectOwnedFiles(ctx, await hostOwnedFiles(ctx, nightlyTime), stored?.ownedFiles ?? {});
+  let inspected = await inspectOwned();
+  let ownedWork = pending(inspected);
 
   const turnkey = await turnkeyPlan(ctx);
 
@@ -147,8 +149,7 @@ export async function hostSetup({ ctx, args }: Invocation): Promise<void> {
   ctx.io.out("");
   ctx.io.out("Plan");
   if (turnkey) step(ctx, "info", turnkey.line);
-  if (missingPackages.length > 0)
-    step(ctx, "info", `Install ${missingPackages.join(" and ")} with apt`);
+  if (missingPackages.length > 0) step(ctx, "info", `Install ${sayList(missingPackages)} with apt`);
   if (missingDirs.length > 0) step(ctx, "info", "Create /etc/dcabsm and /srv/dcabsm");
   step(ctx, "info", `Backups in ${backupDir}`);
   if (ownedWork.length > 0)
@@ -163,6 +164,9 @@ export async function hostSetup({ ctx, args }: Invocation): Promise<void> {
 
   if (turnkey) {
     await turnkey.disable();
+    // TurnKey's own default server on 443 is gone, so DCABSM's catch-all now applies (spec 5.3).
+    inspected = await inspectOwned();
+    ownedWork = pending(inspected);
     step(ctx, "done", "TurnKey: disabled what clashes with DCABSM (nothing deleted)");
     await logChange(ctx, "host setup", "disabled TurnKey pieces that clash with DCABSM");
   }
@@ -177,7 +181,7 @@ export async function hostSetup({ ctx, args }: Invocation): Promise<void> {
     ]);
     if (res.code !== 0) {
       throw new CliError(
-        `apt could not install ${missingPackages.join(" and ")}: ${firstLine(res.stderr, `apt-get exited ${res.code}`)}`,
+        `apt could not install ${sayList(missingPackages)}: ${firstLine(res.stderr, `apt-get exited ${res.code}`)}`,
         "Fix the problem, then run again: sudo dcabsm host setup",
       );
     }

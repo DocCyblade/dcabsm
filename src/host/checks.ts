@@ -1,6 +1,7 @@
 import type { Context } from "../context.ts";
 import { firstLine } from "../errors.ts";
 import { exists } from "../fsutil.ts";
+import { certChecks } from "../certs/doctor.ts";
 import { healthChecks } from "./health.ts";
 import { detectOs, supportedNames } from "./os.ts";
 import { isInstalled } from "./system.ts";
@@ -70,7 +71,10 @@ async function osCheck(ctx: Context, facts: HostFacts): Promise<CheckResult> {
   }
   const turnkey = await facts.turnkey();
   if (turnkey.kind === "supported")
-    return { kind: "pass", label: `${turnkey.label} (${os.supported.name}), ${os.arch}` };
+    return {
+      kind: "pass",
+      label: `${turnkey.label} (${os.supported.name}), ${os.arch}`,
+    };
   const codename = os.codename ? ` (${os.codename})` : "";
   return { kind: "pass", label: `${os.supported.name}${codename}, ${os.arch}` };
 }
@@ -149,7 +153,11 @@ export function parseListeners(output: string): Listener[] {
     const port = Number(/:(\d+)$/.exec(fields[3] ?? "")?.[1]);
     if (port !== 80 && port !== 443) continue;
     const who = /\(\("([^"]+)",pid=(\d+)/.exec(line);
-    found.push({ port, process: who?.[1], pid: who ? Number(who[2]) : undefined });
+    found.push({
+      port,
+      process: who?.[1],
+      pid: who ? Number(who[2]) : undefined,
+    });
   }
   return found;
 }
@@ -231,6 +239,7 @@ export const hostChecks: Check[] = [
   refusing("nginx-config", nginxConfigCheck),
   ...healthChecks,
   ...treeChecks,
+  ...certChecks,
 ];
 
 /** Setup runs the checks that refuse. Nothing here changes the Host. */

@@ -9,9 +9,10 @@ import {
   refuseIfChanging,
   requireInstance,
   runningRelease,
+  unitName,
   type InstanceRecord,
 } from "./record.ts";
-import { verifyInstance } from "./verify.ts";
+import { startVerified } from "./verify.ts";
 
 type Control = "start" | "stop" | "restart";
 
@@ -53,17 +54,22 @@ async function targets(
   return out;
 }
 
+/** Stops the unit and keeps it from starting at boot (spec 4.8). */
+export async function stopInstance(ctx: Context, name: string): Promise<void> {
+  await systemctl(ctx, "stop", unitName(name));
+  await systemctl(ctx, "disable", unitName(name));
+}
+
 async function control(verb: Control, { ctx, args }: Invocation): Promise<void> {
   const { values, positionals } = parseCommand(args, { all: { type: "boolean" } });
   const list = await targets(ctx, verb, positionals, values.all);
   let failed = 0;
   for (const { name, record } of list) {
-    const unit = `dcabsm@${name}`;
+    const unit = unitName(name);
     if (list.length > 1) ctx.io.out(name);
     try {
       if (verb === "stop") {
-        await systemctl(ctx, "stop", unit);
-        await systemctl(ctx, "disable", unit);
+        await stopInstance(ctx, name);
         step(
           ctx,
           "done",
@@ -71,11 +77,13 @@ async function control(verb: Control, { ctx, args }: Invocation): Promise<void> 
         );
         continue;
       }
-      await systemctl(ctx, verb, unit);
-      const release = await runningRelease(ctx, name);
-      const seconds = await verifyInstance(ctx, name, record.port, release);
-      if (verb === "start") await systemctl(ctx, "enable", unit);
-      step(ctx, "done", `Started and verified: /health UP, /info ${release} (${seconds}s)`);
+      await startVerified(ctx, name, record.port, {
+        verb,
+        release: () => runningRelease(ctx, name),
+        onVerified: async () => {
+          if (verb === "start") await systemctl(ctx, "enable", unit);
+        },
+      });
     } catch (err) {
       failed++;
       step(ctx, "failed", `${name}: ${errorMessage(err)}`);
@@ -107,7 +115,7 @@ export async function instanceLogs({ ctx, args }: Invocation): Promise<void> {
   }
   const name = positionals[0]!;
   await requireInstance(ctx, name);
-  const journal = ["-u", `dcabsm@${name}`, "--no-pager"];
+  const journal = ["-u", unitName(name), "--no-pager"];
   if (values.since !== undefined) journal.push("--since", values.since);
   else journal.push("-n", "50");
   if (values.follow) journal.push("-f");

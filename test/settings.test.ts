@@ -62,7 +62,11 @@ const record = async () => JSON.parse(await readFile(file("config", "instance.js
 const config = async () => JSON.parse(await readFile(file("config", "config.json"), "utf8"));
 const systemctls = () =>
   h.calls.filter(
-    (c) => c.command === "systemctl" && c.args[0] !== "is-active" && c.args[0] !== "show",
+    (c) =>
+      c.command === "systemctl" &&
+      c.args[0] !== "is-active" &&
+      c.args[0] !== "show" &&
+      c.args[0] !== "reset-failed",
   );
 const err = () => h.err.join("\n");
 const set = (...args: string[]) => run(["instance", "set", NAME, ...args], h.ctx);

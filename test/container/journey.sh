@@ -173,6 +173,44 @@ grep -rqs "client_max_body_size 61m" /etc/nginx /etc/dcabsm /srv/dcabsm ||
   fail "the vhost does not carry the new upload limit"
 wait_for 60 up alpha.test
 
+step "Upgrade alpha to the newer Release, protected by a Pre-upgrade backup"
+expect_ok dcabsm instance upgrade alpha --to 26.11.0 --yes
+wait_for 60 up alpha.test
+run info alpha.test
+expect_in "26.11.0"
+expect_ok dcabsm backup list alpha
+expect_in "pre-upgrade"
+up beta.test || fail "upgrading alpha took beta down"
+
+step "Retention counts reach the Host settings, and prune applies them"
+expect_ok dcabsm host set keep-pre-upgrade 2
+expect_ok dcabsm host settings
+expect_in "keep-pre-upgrade"
+expect_ok dcabsm backup prune alpha --dry-run
+expect_ok dcabsm backup prune alpha
+expect_ok dcabsm backup list alpha
+expect_in "manual"
+
+step "Node patches: nothing newer is pinned, and the Instances stay up"
+expect_ok dcabsm release update-node --yes
+wait_for 30 up alpha.test
+wait_for 30 up beta.test
+
+step "Certificates: test, then update beta to a new one"
+expect_ok dcabsm cert test alpha
+expect_in "alpha.test"
+openssl req -x509 -newkey rsa:2048 -nodes -days 3 -subj "/CN=beta.test" \
+  -addext "subjectAltName=DNS:beta.test" -keyout /root/beta2.key -out /root/beta2.crt 2> /dev/null
+expect_ok dcabsm cert update beta --cert /root/beta2.crt --key /root/beta2.key
+curl -sf --max-time 5 --cacert /root/beta2.crt --resolve beta.test:443:127.0.0.1 https://beta.test/health | grep -q UP ||
+  fail "beta does not serve the updated certificate"
+# A certificate for another hostname is refused, and the one in place keeps serving.
+expect_refusal "" dcabsm cert update beta --cert /root/beta.crt --key /root/beta2.key
+curl -sf --max-time 5 --cacert /root/beta2.crt --resolve beta.test:443:127.0.0.1 https://beta.test/health | grep -q UP ||
+  fail "a refused update changed what beta serves"
+expect_ok dcabsm instance list
+expect_in "CERT"
+
 step "Reset-password refuses without a terminal"
 expect_refusal "needs a terminal" dcabsm instance reset-password alpha
 
@@ -189,6 +227,37 @@ step "Both Instances are listed"
 expect_ok dcabsm instance list
 expect_in "alpha"
 expect_in "beta"
+
+step "A failed upgrade rolls back by itself, and the start gate is cleaned up"
+echo "127.0.0.1 gamma.test" >> /etc/hosts
+expect_ok dcabsm instance create gamma --hostname gamma.test --self-signed --release 26.10.0
+wait_for 30 up gamma.test
+# Break the newer Release's server so the upgraded Instance can never pass Verification.
+entry="$(readlink -f /srv/dcabsm/instances/beta/release)/node_modules/.bin/actual-server"
+real="$(readlink -f "$entry")"
+cp -a "$real" /root/actual-server.orig
+printf '#!/bin/sh\nexit 1\n' > "$real"
+run dcabsm instance upgrade gamma --to 26.11.0 --yes
+cat /root/actual-server.orig > "$real" # put the Release right again for beta
+[ "$status" -ne 0 ] || fail "an upgrade onto a broken Release exited 0"
+expect_in "Rolling back automatically"
+wait_for 60 up gamma.test
+run info gamma.test
+expect_in "26.10.0"
+[ ! -e /srv/dcabsm/instances/gamma/.changing-release ] || fail "the change marker was left behind"
+expect_ok dcabsm backup list gamma
+expect_in "pre-upgrade"
+expect_ok dcabsm instance remove gamma --confirm gamma
+
+step "Remove beta; its Backups stay under a .removed- folder"
+expect_ok dcabsm instance remove beta --confirm beta
+wait_for 30 down beta.test
+ls /srv/dcabsm/backups | grep -q '^beta\.removed-' || fail "beta's Backups were not kept under a .removed- folder"
+[ ! -e /srv/dcabsm/instances/beta ] || fail "beta's directory is still there"
+! id dcabsm-beta > /dev/null 2>&1 || fail "beta's account is still there"
+expect_ok dcabsm instance list
+case "$out" in *beta*) fail "beta is still listed after remove" ;; esac
+up alpha.test || fail "removing beta took alpha down"
 
 echo
 echo "journey: pinned journey passed ($n steps)"

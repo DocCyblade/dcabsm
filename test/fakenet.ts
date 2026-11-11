@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { FetchResult, RunResult } from "../src/context.ts";
 
@@ -52,6 +52,10 @@ export interface FakeNet {
   tarCreateFails: boolean;
   /** Answer every request with a 503. */
   offline: boolean;
+  /** What a TLS connection to 127.0.0.1:443 is served for a hostname: PEM chains, or undefined for no answer. */
+  served: Record<string, string | undefined>;
+  /** Hostname → addresses it resolves to. A hostname missing here does not resolve. */
+  dns: Record<string, string[]>;
   /** Everything fetched, in order. */
   fetched: string[];
   fetch(url: string): FetchResult | undefined;
@@ -63,6 +67,26 @@ const fail = (stderr: string): RunResult => ({ code: 2, stdout: "", stderr });
 interface FakeArchive {
   members: string[];
   manifest: string;
+  /** Every directory and file under the members, so extracting can bring them back. */
+  dirs?: string[];
+  files?: Record<string, string>;
+}
+
+/** Records the tree under `dir/rel` into the archive. */
+function snapshot(dir: string, rel: string, into: Required<Pick<FakeArchive, "dirs" | "files">>) {
+  const full = join(dir, rel);
+  let isDir: boolean;
+  try {
+    isDir = statSync(full).isDirectory();
+  } catch {
+    return;
+  }
+  if (!isDir) {
+    into.files[rel] = readFileSync(full, "utf8");
+    return;
+  }
+  into.dirs.push(rel);
+  for (const child of readdirSync(full)) snapshot(dir, join(rel, child), into);
 }
 
 function readFakeArchive(path: string): FakeArchive | undefined {
@@ -77,6 +101,7 @@ function readFakeArchive(path: string): FakeArchive | undefined {
 function fakeTarCreate(net: { tarCreateFails: boolean }, args: string[]): RunResult {
   if (net.tarCreateFails) return fail("tar: No space left on device");
   const members: string[] = [];
+  const tree = { dirs: [] as string[], files: {} as Record<string, string> };
   let dir = "";
   let manifest = "";
   for (let i = 2; i < args.length; i++) {
@@ -85,9 +110,10 @@ function fakeTarCreate(net: { tarCreateFails: boolean }, args: string[]): RunRes
     else if (!arg.startsWith("-")) {
       members.push(arg);
       if (arg === "manifest.json") manifest = readFileSync(join(dir, arg), "utf8");
+      else snapshot(dir, arg, tree);
     }
   }
-  writeFileSync(args[1]!, JSON.stringify({ members, manifest }));
+  writeFileSync(args[1]!, JSON.stringify({ members, manifest, ...tree }));
   return ok();
 }
 
@@ -156,6 +182,8 @@ export function fakeNet(overrides: Partial<FakeNet> = {}): FakeNet {
     serverVersion: "26.11.1",
     offline: false,
     tarCreateFails: false,
+    served: {},
+    dns: {},
     fetched: [],
     ...overrides,
     fetch(url) {
@@ -246,6 +274,20 @@ export function fakeNet(overrides: Partial<FakeNet> = {}): FakeNet {
         }
       }
       if (command === "tar" && args[0] === "-czf") return fakeTarCreate(net, args);
+      if (command === "tar" && args[0] === "-xzf" && readFakeArchive(args[1]!)?.members) {
+        const archive = readFakeArchive(args[1]!)!;
+        const dest = args[args.indexOf("-C") + 1]!;
+        const wanted = args.slice(args.indexOf("-C") + 2);
+        const under = (p: string) => wanted.some((w) => p === w || p.startsWith(`${w}/`));
+        for (const d of archive.dirs ?? [])
+          if (under(d)) mkdirSync(join(dest, d), { recursive: true });
+        for (const [rel, text] of Object.entries(archive.files ?? {})) {
+          if (under(rel)) writeFileSync(join(dest, rel), text);
+        }
+        return wanted.every((w) => archive.members.includes(w))
+          ? ok()
+          : fail("tar: not found in archive");
+      }
       if (command === "tar" && args[0] === "-tzf") {
         const archive = readFakeArchive(args[1]!);
         return archive ? ok(archive.members.join("\n") + "\n") : fail("not a gzip file");

@@ -64,7 +64,9 @@ async function start(names: string[], empty: string[] = []): Promise<void> {
 const backup = (...args: string[]) => run(["backup", ...args], h.ctx);
 const backups = (...parts: string[]) => join(h.ctx.paths.under("/srv/dcabsm/backups"), ...parts);
 const systemctls = () =>
-  h.calls.filter((c) => c.command === "systemctl" && c.args[0] !== "is-active").map((c) => c.args);
+  h.calls
+    .filter((c) => c.command === "systemctl" && !["is-active", "reset-failed"].includes(c.args[0]!))
+    .map((c) => c.args);
 const tarMembers = async (path: string) =>
   (JSON.parse(await readFile(path, "utf8")) as { members: string[] }).members;
 
@@ -102,7 +104,7 @@ describe("backup create", () => {
       .filter(
         (c) =>
           (c.command === "tar" && c.args[0] !== "-xzOf") ||
-          (c.command === "systemctl" && c.args[0] !== "is-active"),
+          (c.command === "systemctl" && !["is-active", "reset-failed"].includes(c.args[0]!)),
       )
       .map((c) => `${c.command} ${c.args[0]}`);
     expect(order).toEqual(["systemctl stop", "tar -czf", "tar -tzf", "systemctl start"]);
@@ -311,7 +313,7 @@ describe("instance list", () => {
     const parsed = JSON.parse(await readFile(record, "utf8")) as Record<string, unknown>;
     await writeFile(record, JSON.stringify({ ...parsed, scheduledBackups: false }));
     expect(await run(["instance", "list"], h.ctx)).toBe(0);
-    expect(h.out[0]).toMatch(/LAST SCHEDULED$/);
+    expect(h.out[0]).toMatch(/CERT  LAST SCHEDULED$/);
     expect(h.out[1]).toMatch(/shop .* 11-07 03:30 UTC$/);
     expect(h.out[2]).toMatch(/two .* off$/);
   });

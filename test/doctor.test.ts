@@ -285,6 +285,28 @@ describe("Backups and the rest of the Host", () => {
     expect(text()).toContain("! Backups share a disk with Instance data (/dev/vda1)");
   });
 
+  it("only notes it when that is the one disk on the Host, and exits 0", async () => {
+    await setUpHost(fakeHost({ backupDevice: "/dev/vda1", disks: 1 }));
+    expect(await doctor()).toBe(0);
+    expect(text()).toContain(
+      "· Backups share a disk with Instance data (/dev/vda1), the only disk on this Host",
+    );
+  });
+
+  it("still warns when lsblk cannot say how many disks there are", async () => {
+    await setUpHost(fakeHost({ backupDevice: "/dev/vda1", disks: 0 }));
+    expect(await doctor()).toBe(1);
+  });
+
+  it("notes a stored Retention count that is not usable, and exits 0", async () => {
+    await setUpHost();
+    const config = JSON.parse(await readFile(h.ctx.paths.hostConfig, "utf8"));
+    config.keep = { scheduled: 0 };
+    await writeFile(h.ctx.paths.hostConfig, JSON.stringify(config));
+    expect(await doctor()).toBe(0);
+    expect(text()).toContain("· keep-scheduled in dcabsm.json is not a whole number of 1 or more");
+  });
+
   it("notes a missing bash-completion package", async () => {
     const host = fakeHost();
     await setUpHost(host);

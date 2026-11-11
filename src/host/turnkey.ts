@@ -20,7 +20,8 @@ export const UNSUPPORTED_APPLIANCE =
 
 /**
  * Reads `/etc/turnkey_version`, for example `turnkey-nodejs-19.0-trixie-amd64`, and confirms the
- * appliance against the matching `turnkey-<name>` package (spec 10.7).
+ * appliance against the matching `turnkey-<name>-<version>` package (spec 10.7), such as
+ * `turnkey-nodejs-19.0`.
  */
 export async function detectTurnkey(ctx: Context): Promise<TurnkeyState> {
   const raw = await readTextOr(ctx.paths.under("etc/turnkey_version"));
@@ -31,10 +32,11 @@ export async function detectTurnkey(ctx: Context): Promise<TurnkeyState> {
   const [, name, version] = match as unknown as [string, string, string];
   if (name !== "core" && name !== "nodejs")
     return { kind: "unsupported", found: `TurnKey ${name}` };
-  if (!(await isInstalled(ctx, `turnkey-${name}`)))
+  const pkg = `turnkey-${name}-${version}`;
+  if (!(await isInstalled(ctx, pkg)))
     return {
       kind: "unsupported",
-      found: `/etc/turnkey_version says ${text}, but turnkey-${name} is not installed`,
+      found: `/etc/turnkey_version says ${text}, but ${pkg} is not installed`,
     };
   return { kind: "supported", appliance: name, label: `${LABELS[name]} ${version}` };
 }

@@ -41,3 +41,17 @@ export async function systemctl(ctx: Context, ...args: string[]): Promise<void> 
     );
   }
 }
+
+/**
+ * Starts an Instance unit the Manager means to start. The unit's start limit (3 in 300s) guards a
+ * crash loop, so a deliberate start clears the count first: stops, restarts and upgrades in a row
+ * must not trip it.
+ */
+export async function startUnit(
+  ctx: Context,
+  verb: "start" | "restart",
+  unit: string,
+): Promise<void> {
+  await ctx.runner.run("systemctl", ["reset-failed", unit]);
+  await systemctl(ctx, verb, unit);
+}

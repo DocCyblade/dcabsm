@@ -58,6 +58,12 @@ export async function instanceResetPassword({ ctx, args }: Invocation): Promise<
     );
   }
 
+  await runResetTool(ctx, name);
+}
+
+/** Hands the terminal to Actual's reset tool as the Instance account; DCABSM never sees the password. */
+export async function runResetTool(ctx: Context, name: string): Promise<void> {
+  if (!ctx.runner.inherit) throw refusal("Password reset needs a terminal.");
   const account = accountOf(name);
   const dir = logicalDir(name);
   ctx.io.out("If you paste a password, press Enter separately.");
