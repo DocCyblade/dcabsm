@@ -34,7 +34,7 @@ import { switchRelease } from "./switch.ts";
 import { planIfMissing } from "./upgrade-plan.ts";
 import { startVerified } from "./verify.ts";
 
-const USAGE = "Usage: dcabsm instance rollback <name> [--restore-data] [--confirm <name>]";
+const USAGE = "Usage: dcabsm instance rollback <name> [--restore-data] [--yes] [--confirm <name>]";
 
 interface Job {
   name: string;
@@ -295,7 +295,7 @@ async function finishInterrupted(ctx: Context, job: Job, yes: boolean): Promise<
   if (done.restored) deviceAdvice(ctx);
 }
 
-/** `instance rollback <name> [--restore-data] [--confirm <name>]` (spec 6.5, 6.6) */
+/** `instance rollback <name> [--restore-data] [--yes] [--confirm <name>]` (spec 6.5, 6.6) */
 export async function instanceRollback({ ctx, args }: Invocation): Promise<void> {
   const { values, positionals } = parseCommand(args, {
     "restore-data": { type: "boolean" },
