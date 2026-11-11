@@ -70,7 +70,9 @@ describe("instance clone from a source", () => {
       "Logins are copied: everyone who can log in to shop can log in to shop-test",
     );
     expect(t.out()).toContain("OpenID");
-    expect(t.out()).toContain("redirect URL");
+    expect(t.out()).toContain(
+      "add https://try.example.org/openid/callback as a redirect URL at the provider",
+    );
     expect(t.out()).toContain("Started and verified: /health UP, /info 26.11.0");
   });
 

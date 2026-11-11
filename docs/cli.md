@@ -568,7 +568,7 @@ Restart family now? [Y/n]
 
 OpenID is set up in Actual's own web UI, not through DCABSM ([ADR-0005](adr/0005-openid-belongs-to-actual.md)). Actual stores it, client secret included, in the Instance's `server-files/`, so Backups and Clones carry it.
 
-1. With your OpenID provider, register a client for the Instance with the redirect URL `https://<hostname>`, the Instance's own hostname.
+1. With your OpenID provider, register a client for the Instance with the redirect URL `https://<hostname>/openid/callback`, using the Instance's own hostname (Actual's OpenID documentation gives this path).
 2. Log in to the Instance as its server owner, and switch the server to OpenID in Actual's settings, giving the provider's details. Actual's own documentation has the exact steps for your Release.
 3. If you want, set `openid-enforce` and `openid-user-creation` with `instance set`.
 
@@ -774,7 +774,7 @@ Continue? [y/N] y
 
 - `--hostname` is required. A clone always gets its own hostname, checked as in `instance create`.
 - The source's certificate is copied only if it covers the new hostname, such as a wildcard. Otherwise give `--cert`/`--key` or `--self-signed`, or answer the certificate prompt.
-- Everything inside Actual is copied, including users, passwords and OpenID settings. The OpenID settings name the source's hostname, so if the source uses OpenID, update them in the clone and add its redirect URL at the provider.
+- Everything inside Actual is copied, including users, passwords and OpenID settings. The OpenID settings name the source's hostname, so if the source uses OpenID, update them in the clone and add `https://<hostname>/openid/callback` for the clone's hostname as a redirect URL at the provider.
 
 ## backup
 
