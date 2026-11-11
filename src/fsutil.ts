@@ -10,6 +10,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { join } from "node:path";
+import { refusal } from "./errors.ts";
 
 export async function exists(path: string): Promise<boolean> {
   try {
@@ -26,6 +27,15 @@ export async function readTextOr(path: string): Promise<string | undefined> {
     return await readFile(path, "utf8");
   } catch {
     return undefined;
+  }
+}
+
+/** The text of a file the command needs, or a refusal naming `what` (for example "certificate"). */
+export async function readOrRefuse(path: string, what: string): Promise<string> {
+  try {
+    return await readFile(path, "utf8");
+  } catch {
+    throw refusal(`Cannot read the ${what} file ${path}.`);
   }
 }
 

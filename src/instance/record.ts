@@ -42,6 +42,15 @@ export async function readRecord(ctx: Context, name: string): Promise<InstanceRe
 }
 
 /** Instance names, in order. Dot-prefixed work directories are ignored. */
+/** Writes `config/instance.json` (spec 4.4). */
+export async function writeRecord(
+  ctx: Context,
+  name: string,
+  record: InstanceRecord,
+): Promise<void> {
+  await writeFileAtomic(recordPath(ctx, name), `${JSON.stringify(record, null, 2)}\n`, 0o600);
+}
+
 export async function instanceNames(ctx: Context): Promise<string[]> {
   try {
     return (await readdir(ctx.paths.instances)).filter((n) => !n.startsWith(".")).sort();

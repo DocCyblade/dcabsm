@@ -2,7 +2,7 @@ import { readFile, readdir } from "node:fs/promises";
 import type { Context } from "../context.ts";
 import { errorMessage } from "../errors.ts";
 import { writeFileAtomic } from "../fsutil.ts";
-import { step } from "../output.ts";
+import { formatTime, step } from "../output.ts";
 import { installedReleases, latestStable } from "../release/install.ts";
 import { linkedPatch } from "../release/node.ts";
 import { compareText, parseVersion } from "../release/semver.ts";
@@ -202,8 +202,4 @@ export async function instanceListFooter(ctx: Context): Promise<string[]> {
   if (nightly) parts.push(`Nightly run ${nightly}`);
   if (footer.lastCheck) parts.push(`last check ${footer.lastCheck}`);
   return ["", parts.join(" · "), ...footer.lines];
-}
-
-function formatTime(d: Date): string {
-  return `${d.toISOString().slice(0, 10)} ${d.toISOString().slice(11, 16)} UTC`;
 }

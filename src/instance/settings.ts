@@ -1,24 +1,22 @@
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 import { parseCommand } from "../args.ts";
 import { formatColumns } from "../columns.ts";
 import type { Context } from "../context.ts";
 import { CliError, refusal } from "../errors.ts";
 import { writeFileAtomic } from "../fsutil.ts";
-import { hostHasIpv6 } from "../host/owned.ts";
 import { nginxTestFailure, systemctl } from "../host/system.ts";
 import { step } from "../output.ts";
 import { confirm } from "../prompt.ts";
 import type { Invocation } from "../table.ts";
 import { instanceRestart } from "./controls.ts";
-import { vhostConf, writeConfigJson } from "./files.ts";
+import { vhostPath, writeConfigJson, writeVhost } from "./files.ts";
 import { stateOf } from "./list.ts";
 import {
-  instanceDir,
   recordPath,
   refuseIfChanging,
   requireInstance,
   runningRelease,
+  writeRecord,
   type InstanceRecord,
 } from "./record.ts";
 import {
@@ -51,9 +49,9 @@ function lookup(key: string): SettingDef {
  * If `nginx -t` fails, the old file goes back.
  */
 async function reloadVhost(ctx: Context, name: string, record: InstanceRecord): Promise<string> {
-  const path = join(instanceDir(ctx, name), "nginx", "vhost.conf");
+  const path = vhostPath(ctx, name);
   const old = await readFile(path, "utf8");
-  await writeFileAtomic(path, vhostConf(name, record, await hostHasIpv6(ctx)), 0o600);
+  await writeVhost(ctx, name, record);
   try {
     const failure = await nginxTestFailure(ctx);
     if (failure) throw new CliError(`nginx -t failed: ${failure}`, "Nothing was changed.");
@@ -83,7 +81,7 @@ async function apply(ctx: Context, change: Change): Promise<void> {
   const path = recordPath(ctx, name);
   const oldText = await readFile(path, "utf8");
   // Files first: if a write fails, Nginx has not moved ahead of the record.
-  await writeFileAtomic(path, `${JSON.stringify(after, null, 2)}\n`, 0o600);
+  await writeRecord(ctx, name, after);
   await writeConfigJson(ctx, name, after, release);
   let nginx: string | undefined;
   if (UPLOAD_KEYS.includes(key)) {

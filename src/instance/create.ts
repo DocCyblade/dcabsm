@@ -5,7 +5,6 @@ import { validateCertificateFiles, type CertificateInfo } from "../cert.ts";
 import type { Context } from "../context.ts";
 import { Cancelled, CliError, errorMessage, firstLine, refusal } from "../errors.ts";
 import { ensureDir, exists, writeFileAtomic } from "../fsutil.ts";
-import { hostHasIpv6 } from "../host/owned.ts";
 import { nginxTestFailure, systemctl } from "../host/system.ts";
 import { step } from "../output.ts";
 import { confirm } from "../prompt.ts";
@@ -16,7 +15,7 @@ import {
   planRelease,
 } from "../release/install.ts";
 import type { Invocation } from "../table.ts";
-import { vhostConf, writeConfigJson } from "./files.ts";
+import { writeConfigJson, writeVhost } from "./files.ts";
 import {
   accountOf,
   checkName,
@@ -25,6 +24,7 @@ import {
   instanceNames,
   readRecord,
   unitName,
+  writeRecord,
   type InstanceRecord,
 } from "./record.ts";
 import { runResetTool } from "./reset-password.ts";
@@ -243,11 +243,7 @@ async function writeConfigFiles(
 ): Promise<void> {
   const dir = instanceDir(ctx, name);
   await symlink(join(ctx.paths.releases, release), join(dir, "release"));
-  await writeFileAtomic(
-    join(dir, "config", "instance.json"),
-    `${JSON.stringify(record, null, 2)}\n`,
-    0o600,
-  );
+  await writeRecord(ctx, name, record);
   await writeConfigJson(ctx, name, record, release);
 }
 
@@ -327,11 +323,7 @@ async function createFiles(
     await makeDirectories(ctx, name);
     await writeConfigFiles(ctx, name, record, release);
     await writeCertificate(ctx, name, hostname, source);
-    await writeFileAtomic(
-      join(instanceDir(ctx, name), "nginx", "vhost.conf"),
-      vhostConf(name, record, await hostHasIpv6(ctx)),
-      0o600,
-    );
+    await writeVhost(ctx, name, record);
     step(ctx, "done", `Instance on Release ${release}, port ${record.port}`);
     reportCertificate(ctx, hostname, source);
 

@@ -5,8 +5,7 @@ import { inspectChain, validateCertificate, type CertificateInfo } from "../cert
 import { confirmServed, SERVE_SECONDS } from "../certs/probe.ts";
 import type { Context } from "../context.ts";
 import { CliError, errorMessage, refusal } from "../errors.ts";
-import { writeFileAtomic } from "../fsutil.ts";
-import { hostHasIpv6 } from "../host/owned.ts";
+import { readOrRefuse, writeFileAtomic } from "../fsutil.ts";
 import { nginxTestFailure, systemctl } from "../host/system.ts";
 import { step } from "../output.ts";
 import type { Invocation } from "../table.ts";
@@ -17,25 +16,18 @@ import {
   reportCertificate,
   writeCertificate,
 } from "./create.ts";
-import { vhostConf } from "./files.ts";
+import { vhostPath, writeVhost } from "./files.ts";
 import {
   instanceDir,
   recordPath,
   refuseIfChanging,
   requireInstance,
+  writeRecord,
   type InstanceRecord,
 } from "./record.ts";
 
 const USAGE =
   "Usage: dcabsm instance set-hostname <name> <host> [--cert <f> [--key <f>] | --self-signed]";
-
-async function readOrRefuse(path: string, what: string): Promise<string> {
-  try {
-    return await readFile(path, "utf8");
-  } catch {
-    throw refusal(`Cannot read the ${what} file ${path}.`);
-  }
-}
 
 /** The files a hostname change can touch, as they were, so a failure puts them back. */
 interface Saved {
@@ -107,7 +99,7 @@ export async function instanceSetHostname({ ctx, args }: Invocation): Promise<vo
   const dir = instanceDir(ctx, name);
   const path = {
     record: recordPath(ctx, name),
-    vhost: join(dir, "nginx", "vhost.conf"),
+    vhost: vhostPath(ctx, name),
     cert: join(dir, "nginx", "cert.pem"),
     key: join(dir, "nginx", "key.pem"),
   };
@@ -133,8 +125,8 @@ export async function instanceSetHostname({ ctx, args }: Invocation): Promise<vo
     } else if (choice.kind === "self-signed") {
       await writeCertificate(ctx, name, hostname, { kind: "self-signed" });
     }
-    await writeFileAtomic(path.record, `${JSON.stringify(after, null, 2)}\n`, 0o600);
-    await writeFileAtomic(path.vhost, vhostConf(name, after, await hostHasIpv6(ctx)), 0o600);
+    await writeRecord(ctx, name, after);
+    await writeVhost(ctx, name, after);
     if (choice.kind === "current") {
       step(ctx, "done", `Certificate covers ${hostname}`);
     } else {

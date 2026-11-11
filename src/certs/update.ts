@@ -1,9 +1,8 @@
-import { readFile } from "node:fs/promises";
 import { parseCommand } from "../args.ts";
 import { inspectChain, validateCertificate } from "../cert.ts";
 import type { Context } from "../context.ts";
 import { CliError, errorMessage, refusal } from "../errors.ts";
-import { writeFileAtomic } from "../fsutil.ts";
+import { readOrRefuse, writeFileAtomic } from "../fsutil.ts";
 import { nginxTestFailure, systemctl } from "../host/system.ts";
 import { refuseIfChanging } from "../instance/record.ts";
 import { step } from "../output.ts";
@@ -11,14 +10,6 @@ import type { Invocation } from "../table.ts";
 import { certTargets, confirmServed, SERVE_SECONDS, type CertTarget } from "./probe.ts";
 
 const USAGE = "cert update <names>|--all --cert <f> [--key <f>]";
-
-async function readOrRefuse(path: string, what: string): Promise<string> {
-  try {
-    return await readFile(path, "utf8");
-  } catch {
-    throw refusal(`Cannot read the ${what} file ${path}.`);
-  }
-}
 
 interface Swap {
   target: CertTarget;
