@@ -323,7 +323,7 @@ If npm can't be reached, it warns and still checks the rest.
 | `nightly-time` | `HH:MM`, Host local time. Changing it regenerates the timer |
 | `keep-scheduled`, `keep-pre-upgrade`, `keep-pre-restore`, `keep-pre-clone` | Retention count, never below 1 (spec 8.3) |
 
-`backup-dir` is shown but can only be set by `host setup --backup-dir`. Any other key gets "Unknown setting".
+`backup-dir` is shown but can only be set by `host setup --backup-dir`. Any other key gets "unknown setting".
 
 ## instance
 
