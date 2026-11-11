@@ -138,6 +138,19 @@ describe("host nightly", () => {
     expect(text).toContain("1 failed");
   });
 
+  it("says the Backup was fine when only the pruning after it failed", async () => {
+    await start(["shop"]);
+    // A directory can't be removed as an archive, so pruning the oldest fails.
+    for (let i = 1; i <= 15; i++) {
+      await mkdir(
+        backups("shop", `202610${String(i).padStart(2, "0")}T033000Z-scheduled-26.11.1.tar.gz`),
+        { recursive: true },
+      );
+    }
+    expect(await nightly()).toBe(1);
+    expect(h.out.join("\n")).toMatch(/shop\s+failed\s+Backup ok, prune failed: /);
+  });
+
   it("applies Retention after a successful Backup", async () => {
     await start(["shop"]);
     await mkdir(backups("shop"), { recursive: true });
