@@ -36,7 +36,7 @@ const startAndVerify = (ctx: Context, job: UpgradeJob, release: string): Promise
   startVerified(ctx, job.name, job.record.port, { release });
 
 /** The same with the marker in place, so the unit's marker rule is lifted for this start (spec 6.1). */
-const startAndVerifyChanging = (ctx: Context, job: UpgradeJob, release: string): Promise<void> =>
+const startThroughGate = (ctx: Context, job: UpgradeJob, release: string): Promise<void> =>
   withStartGate(ctx, job.name, () => startAndVerify(ctx, job, release));
 
 /** The Instance never started, so it has no data: it only changes Release (spec 6.1). */
@@ -101,7 +101,7 @@ async function rollBack(
     step(ctx, "done", `Restored data from ${backup.split("/").at(-1)}`);
     await switchRelease(ctx, name, job.record, from);
     step(ctx, "done", `Switched back to ${from}`);
-    await startAndVerifyChanging(ctx, job, from);
+    await startThroughGate(ctx, job, from);
   } catch (err) {
     await systemctl(ctx, "stop", unitName(name)).catch(() => undefined);
     step(ctx, "failed", `Automatic rollback failed: ${errorMessage(err)}`);
@@ -136,7 +136,7 @@ export async function upgradeInstance(ctx: Context, job: UpgradeJob): Promise<Ou
   try {
     await writeConfigJson(ctx, name, job.record, to);
     step(ctx, "done", `Switched to ${to}, config.json regenerated`);
-    await startAndVerifyChanging(ctx, job, to);
+    await startThroughGate(ctx, job, to);
   } catch (err) {
     step(ctx, "failed", errorMessage(err));
     return rollBack(ctx, job, backup, errorMessage(err), wasUp);
