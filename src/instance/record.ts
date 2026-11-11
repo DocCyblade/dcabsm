@@ -91,8 +91,10 @@ export interface ChangeMarker {
   to: string;
   /** The Backup the change can be undone from, as a path on disk. */
   backup: string;
-  /** True while data is being restored from `backup`. */
+  /** True while data is being restored. */
   restoringData: boolean;
+  /** The archive a restore reads. In a restore the `backup` is its `pre-restore` Backup, so this names the source. */
+  archive?: string;
 }
 
 export async function writeMarker(ctx: Context, name: string, marker: ChangeMarker): Promise<void> {
@@ -111,14 +113,26 @@ export async function readMarker(ctx: Context, name: string): Promise<ChangeMark
 export const removeMarker = (ctx: Context, name: string): Promise<void> =>
   rm(changingMarker(ctx, name), { force: true });
 
-/** Refuses while a Release change is unfinished. */
+/**
+ * The one rule for an unfinished Release change (spec 6.6): every changing command for the Instance
+ * calls this and refuses, except `instance rollback`, which is how the change is finished.
+ */
 export async function refuseIfChanging(ctx: Context, name: string): Promise<void> {
-  if (await isChanging(ctx, name)) {
-    throw refusal(
-      `${name} has an unfinished Release change.`,
-      "Finish it first: dcabsm instance upgrade or dcabsm instance rollback",
-    );
-  }
+  if (!(await isChanging(ctx, name))) return;
+  const marker = await readMarker(ctx, name);
+  const detail = marker ? ` (${marker.operation}, ${marker.from} → ${marker.to})` : "";
+  throw refusal(
+    `${name} has an unfinished Release change${detail}.`,
+    `Only rollback can run now: sudo dcabsm instance rollback ${name}`,
+  );
+}
+
+/** One line for list and show: what is unfinished, or undefined when nothing is. */
+export async function changeSummary(ctx: Context, name: string): Promise<string | undefined> {
+  if (!(await isChanging(ctx, name))) return undefined;
+  const marker = await readMarker(ctx, name);
+  const detail = marker ? ` (${marker.operation}, ${marker.from} → ${marker.to})` : "";
+  return `unfinished Release change${detail}`;
 }
 
 /** The Release the Instance's `release` link points to. */

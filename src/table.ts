@@ -16,6 +16,7 @@ import { instanceLogs, instanceRestart, instanceStart, instanceStop } from "./in
 import { instanceList, instanceShow } from "./instance/list.ts";
 import { instanceRemove } from "./instance/remove.ts";
 import { instanceRestore } from "./instance/restore.ts";
+import { instanceRollback } from "./instance/rollback.ts";
 import { instanceUpgrade } from "./instance/upgrade.ts";
 import { instanceResetPassword } from "./instance/reset-password.ts";
 import { instanceSetHostname } from "./instance/set-hostname.ts";
@@ -210,6 +211,7 @@ export const table: Noun[] = [
         usage: "rollback <name> [--restore-data] [--confirm <name>]",
         summary: "Go back one step to the previous Release",
         changes: true,
+        run: instanceRollback,
       },
       {
         name: "restore",

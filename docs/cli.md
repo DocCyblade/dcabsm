@@ -373,7 +373,7 @@ DCABSM 1.2.0 · Nightly run 03:30 · last check 2026-11-07 12:00 UTC
 → Node 24.11.2 patch for Node 24: sudo dcabsm release update-node
 ```
 
-- An Instance with an unfinished Release change shows `CHANGING` as its state. `start` and `restart` refuse it and point to `instance upgrade` or `instance rollback`; `stop` still works.
+- An Instance with an unfinished Release change shows `CHANGING` as its state. `start` and `restart` refuse it and point to `instance rollback`; `stop` still works. Below the table a warning names the operation, its Releases and the `instance rollback` command.
 - LAST SCHEDULED shows `off` when scheduled Backups are off, and `none` when there are none. It warns when an Instance with scheduled Backups on has none newer than 48 hours.
 - The Unsupported Host mark is always shown.
 - With no Instances, it points to `instance create`.
@@ -395,7 +395,7 @@ family  active
   Settings           upload-sync-limit-mb 100
 ```
 
-It lists the Instance settings the System Admin set, and marks any the current Release doesn't use as "not used by <release>". An unfinished Release change shows as a warning with the `instance rollback` command.
+It lists the Instance settings the System Admin set, and marks any the current Release doesn't use as "not used by <release>". An unfinished Release change shows as `CHANGING` and a warning with the `instance rollback` command.
 
 ### instance create
 
@@ -677,7 +677,9 @@ It ends with the same device advice as [instance restore](#instance-restore).
 
 - If the newest Pre-upgrade backup is already on the current Release, there is nothing to roll back, and it points to `instance restore`.
 - A Release removed by `release prune` is reinstalled from npm.
-- **After an interruption**, such as a reboot during an Upgrade or restore, `instance rollback <name>` is the only command that runs for that Instance, and it finishes the job safely (spec 6.6).
+- **After an interruption**, such as a reboot during an Upgrade or restore, `instance rollback <name>` is the only changing command that runs for that Instance, and it finishes the job safely (spec 6.6). It asks `Continue? [y/N]` (`--yes` answers), then: after an interrupted Upgrade it restores the Backup in the marker and returns to the from Release, with no Regroup; after an interrupted restore, or an interrupted `--restore-data`, it repeats the restore, with a Regroup and the device advice; after an interrupted rollback that kept data, it goes to the marker's to Release and keeps the data. If that fails too, the Instance stays stopped and the marker stays.
+- `--yes` or `--confirm <name>` answers the `Continue?` prompt of the default rollback, so a script needs only one flag. `--restore-data` needs `--confirm <name>` without a terminal.
+- If even the return to the newer Release fails, the Instance stays stopped with the marker, and running `instance rollback` again finishes the return.
 - Any Instance setting the older Release doesn't know is listed as "not used by <release>".
 
 <a id="restore"></a>

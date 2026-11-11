@@ -191,6 +191,21 @@ expect_ok dcabsm backup prune alpha
 expect_ok dcabsm backup list alpha
 expect_in "manual"
 
+step "Roll alpha back one step, keeping its data, then upgrade it again"
+expect_ok dcabsm instance rollback alpha --yes
+expect_in "keeping current data"
+expect_in "Click Update now"
+wait_for 60 up alpha.test
+run info alpha.test
+expect_in "26.10.0"
+[ ! -e /srv/dcabsm/instances/alpha/.changing-release ] || fail "the change marker was left behind by rollback"
+expect_refusal "Nothing to roll back" dcabsm instance rollback alpha --yes
+up beta.test || fail "rolling alpha back took beta down"
+expect_ok dcabsm instance upgrade alpha --to 26.11.0 --yes
+wait_for 60 up alpha.test
+run info alpha.test
+expect_in "26.11.0"
+
 step "Node patches: nothing newer is pinned, and the Instances stay up"
 expect_ok dcabsm release update-node --yes
 wait_for 30 up alpha.test
