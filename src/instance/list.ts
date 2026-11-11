@@ -14,6 +14,7 @@ import type { Invocation } from "../table.ts";
 import { settingsSummary } from "./setting-table.ts";
 import {
   accountOf,
+  changeSummary,
   instanceDir,
   instanceNames,
   isChanging,
@@ -136,6 +137,14 @@ export async function instanceList({ ctx }: Invocation): Promise<void> {
   }
   for (const line of renderInstanceTable(rows)) ctx.io.out(line);
   for (const row of rows) {
+    const change = await changeSummary(ctx, row.name);
+    if (change) {
+      step(
+        ctx,
+        "warn",
+        `${row.name}: ${change}. Only rollback can run: sudo dcabsm instance rollback ${row.name}`,
+      );
+    }
     if (row.overdue) step(ctx, "warn", `${row.name}: no scheduled Backup in the last 48 hours`);
   }
   for (const line of await instanceListFooter(ctx)) ctx.io.out(line);
@@ -164,4 +173,8 @@ export async function instanceShow({ ctx, args }: Invocation): Promise<void> {
   if (settings) fields.push(["Settings", settings]);
   ctx.io.out(`${name}  ${row.state}`);
   for (const [label, value] of fields) ctx.io.out(`  ${label.padEnd(17)}  ${value}`);
+  const change = await changeSummary(ctx, name);
+  if (change) {
+    step(ctx, "warn", `${change}. Only rollback can run: sudo dcabsm instance rollback ${name}`);
+  }
 }

@@ -1,7 +1,13 @@
 import { rm } from "node:fs/promises";
 import { parseCommand } from "../args.ts";
 import { refusal } from "../errors.ts";
-import { checkName, instanceNames, requireInstance } from "../instance/record.ts";
+import {
+  checkName,
+  instanceNames,
+  isChanging,
+  refuseIfChanging,
+  requireInstance,
+} from "../instance/record.ts";
 import { step } from "../output.ts";
 import type { Invocation } from "../table.ts";
 import { describeCounts, keepCounts, planPrune } from "./retention.ts";
@@ -21,8 +27,19 @@ export async function backupPrune({ ctx, args }: Invocation): Promise<void> {
   for (const name of positionals) {
     checkName(name);
     await requireInstance(ctx, name);
+    await refuseIfChanging(ctx, name);
   }
-  const names = positionals.length > 0 ? [...new Set(positionals)] : await instanceNames(ctx);
+  // A marker names the Backup an interrupted change is undone from, so pruning leaves that Instance alone.
+  const names: string[] = [];
+  for (const name of positionals.length > 0
+    ? [...new Set(positionals)]
+    : await instanceNames(ctx)) {
+    if (positionals.length === 0 && (await isChanging(ctx, name))) {
+      step(ctx, "warn", `${name}: unfinished Release change, skipped`);
+    } else {
+      names.push(name);
+    }
+  }
   const counts = await keepCounts(ctx);
   const dry = values["dry-run"] === true;
 

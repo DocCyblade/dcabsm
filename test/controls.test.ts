@@ -118,7 +118,7 @@ describe("instance start, stop and restart", () => {
     await start(["test"]);
     await writeFile(join(h.ctx.paths.instances, "test", ".changing-release"), "");
     expect(await run(["instance", "restart", "test"], h.ctx)).toBe(2);
-    expect(h.err.join("\n")).toContain("instance upgrade");
+    expect(h.err.join("\n")).toContain("instance rollback");
     expect(sysctl()).toEqual([]);
     expect(await run(["instance", "stop", "test"], h.ctx)).toBe(0);
     expect(sysctl().map((c) => c.args)).toEqual([

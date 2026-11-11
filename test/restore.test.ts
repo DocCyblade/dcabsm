@@ -190,6 +190,7 @@ describe("instance restore", () => {
       from: "26.11.0",
       to: "26.11.0",
       backup: backups("shop", "20261109T120000Z-pre-restore-26.11.0.tar.gz"),
+      archive: backups("shop", old),
       restoringData: true,
     });
     expect(markers.at(-1)!.gate).toBe(true);

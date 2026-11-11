@@ -110,7 +110,14 @@ async function restoreInstance(ctx: Context, job: Job): Promise<void> {
     throw err;
   }
   const backup = join(await backupRoot(ctx), name, file);
-  await writeMarker(ctx, name, { operation: "restore", from, to, backup, restoringData: true });
+  await writeMarker(ctx, name, {
+    operation: "restore",
+    from,
+    to,
+    backup,
+    archive: job.archive,
+    restoringData: true,
+  });
 
   try {
     await restoreData(ctx, name, job.archive);
