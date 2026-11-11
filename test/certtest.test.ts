@@ -84,6 +84,21 @@ describe("cert test", () => {
     expect(out()).toContain("b  b.example.org");
   });
 
+  it("fails a file on disk that does not cover the hostname when nothing is served", async () => {
+    await setup();
+    t!.add("c", "c.example.org", a);
+    t!.reload();
+    delete t!.net.served["c.example.org"];
+    expect(await result(run("c"))).toMatch(/^1:/);
+    expect(out()).toContain("✗ Certificate file does not cover c.example.org");
+  });
+
+  it("does not repeat the hostname failure when the served and disk certificates match", async () => {
+    await setup();
+    expect(await result(run("a"))).toBe("ok");
+    expect(out()).not.toContain("Certificate file does not cover");
+  });
+
   it("notes a hostname that resolves elsewhere", async () => {
     await setup();
     t!.net.dns["a.example.org"] = ["203.0.113.9"];

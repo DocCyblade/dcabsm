@@ -79,6 +79,11 @@ export async function testInstance(ctx: Context, target: CertTarget): Promise<Fi
     }
   }
 
+  // When nothing was served to compare with, or something else was, the file itself must be right.
+  if (!disk.covers && (!served || served.fingerprint !== disk.fingerprint)) {
+    found.push({ mark: "failed", text: `Certificate file does not cover ${hostname}` });
+  }
+
   const facts = served ?? disk;
   if (facts.daysLeft < 0)
     found.push({ mark: "failed", text: `Expired ${-facts.daysLeft} days ago` });
