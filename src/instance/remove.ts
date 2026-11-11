@@ -94,7 +94,7 @@ export async function instanceRemove({ ctx, args }: Invocation): Promise<void> {
   if (res.code !== 0) {
     throw new CliError(
       `Deleted ${name} but could not delete the account ${account}: ${res.stderr.trim() || `exit ${res.code}`}`,
-      `Run: sudo userdel ${account}`,
+      `Delete the leftover account with: sudo dcabsm host doctor --fix`,
     );
   }
   step(ctx, "done", `Deleted Instance and account ${account}`);
