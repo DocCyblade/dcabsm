@@ -1,5 +1,5 @@
 import { parseCommand } from "../args.ts";
-import { COUNTED_KINDS } from "../backup/retention.ts";
+import { COUNTED_KINDS, keepReport } from "../backup/retention.ts";
 import { formatColumns } from "../columns.ts";
 import { refusal } from "../errors.ts";
 import { step } from "../output.ts";
@@ -24,10 +24,14 @@ export async function hostSettings({ ctx, args }: Invocation): Promise<void> {
   parseCommand(args, {});
   const stored = (await readHostConfig(ctx)) ?? {};
   const defaults = defaultHostConfig(stored.backupDir ?? DEFAULT_BACKUP_DIR);
+  const { counts, invalid } = await keepReport(ctx);
   const rows = [
     ["backup-dir", `${defaults.backupDir}  (set at setup)`],
     ["nightly-time", stored.nightlyTime ?? defaults.nightlyTime],
-    ...COUNTED_KINDS.map((k) => [`keep-${k}`, String(stored.keep?.[k] ?? defaults.keep[k])]),
+    ...COUNTED_KINDS.map((k) => [
+      `keep-${k}`,
+      `${counts[k]}${invalid.includes(k) ? "  (stored value invalid, using default)" : ""}`,
+    ]),
   ];
   for (const line of formatColumns(rows)) ctx.io.out(`  ${line}`);
 }

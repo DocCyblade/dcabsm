@@ -4,6 +4,7 @@ import type { Context } from "../context.ts";
 import { ensureDir, makeWritable, ownedByRoot, rootOwner } from "../fsutil.ts";
 import { DEFAULT_BACKUP_DIR, readHostConfig } from "./config.ts";
 import type { Check, CheckResult } from "./checks.ts";
+import { keepReport } from "../backup/retention.ts";
 import { installedReleases } from "../release/install.ts";
 
 /** Checks of the `/etc/dcabsm` and `/srv/dcabsm` trees (spec 2.2, 10.6). */
@@ -220,10 +221,22 @@ async function sharedDisk(ctx: Context): Promise<CheckResult[]> {
   ];
 }
 
+async function retentionCounts(ctx: Context): Promise<CheckResult[]> {
+  const { invalid } = await keepReport(ctx);
+  if (invalid.length === 0) return pass("Retention counts are valid");
+  return invalid.map((kind) => ({
+    kind: "problem" as const,
+    severity: "note" as const,
+    message: `keep-${kind} in dcabsm.json is not a whole number of 1 or more; Retention uses the default`,
+    hint: `Set it with: sudo dcabsm host set keep-${kind} <count>`,
+  }));
+}
+
 export const treeChecks: Check[] = [
   { id: "ownership", run: ownership },
   { id: "installing-leftovers", run: leftovers },
   { id: "orphan-accounts", run: orphanAccounts },
   { id: "removed-backups", run: removedBackups },
   { id: "shared-disk", run: sharedDisk },
+  { id: "retention-counts", run: retentionCounts },
 ];

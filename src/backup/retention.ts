@@ -9,14 +9,27 @@ export type CountedKind = (typeof COUNTED_KINDS)[number];
 
 /** The Retention count for each counted kind: the stored one, else the default. Never below 1. */
 export async function keepCounts(ctx: Context): Promise<Record<CountedKind, number>> {
+  return (await keepReport(ctx)).counts;
+}
+
+/** `keepCounts`, plus the kinds whose stored count is unusable and fell back to the default. */
+export async function keepReport(
+  ctx: Context,
+): Promise<{ counts: Record<CountedKind, number>; invalid: CountedKind[] }> {
   const stored = (await readHostConfig(ctx))?.keep ?? {};
   const defaults = defaultHostConfig("").keep;
   const counts = {} as Record<CountedKind, number>;
+  const invalid: CountedKind[] = [];
   for (const kind of COUNTED_KINDS) {
     const n = stored[kind];
-    counts[kind] = Number.isInteger(n) && n! >= 1 ? n! : defaults[kind]!;
+    if (n === undefined) counts[kind] = defaults[kind]!;
+    else if (Number.isInteger(n) && n >= 1) counts[kind] = n;
+    else {
+      counts[kind] = defaults[kind]!;
+      invalid.push(kind);
+    }
   }
-  return counts;
+  return { counts, invalid };
 }
 
 /** "14 scheduled, 5 pre-upgrade, ..." */

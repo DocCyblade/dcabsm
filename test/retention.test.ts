@@ -118,6 +118,14 @@ describe("host settings and host set", () => {
     ]);
   });
 
+  it("marks a hand-edited count that Retention can't use", async () => {
+    await start({ keep: { scheduled: 0, "pre-upgrade": 7 } });
+    await run(["host", "settings"], h.ctx);
+    const text = h.out.join("\n");
+    expect(text).toContain("keep-scheduled    14  (stored value invalid, using default)");
+    expect(text).toContain("keep-pre-upgrade  7\n");
+  });
+
   it("sets a keep count and shows it", async () => {
     await start({ backupDir: "/mnt/b" });
     expect(await run(["host", "set", "keep-scheduled", "30"], h.ctx)).toBe(0);
