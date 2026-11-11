@@ -1,5 +1,6 @@
 import type { Context } from "../context.ts";
 import { CliError } from "../errors.ts";
+import { unitName } from "./record.ts";
 
 /** How long a started Instance has to come up (spec 6.2). */
 export const VERIFY_SECONDS = 120;
@@ -27,7 +28,7 @@ export async function verifyInstance(
   port: number,
   version: string,
 ): Promise<number> {
-  const unit = `dcabsm@${name}`;
+  const unit = unitName(name);
   const began = ctx.now().getTime();
   const elapsed = () => Math.round((ctx.now().getTime() - began) / 1000);
   const fail = (why: string) =>

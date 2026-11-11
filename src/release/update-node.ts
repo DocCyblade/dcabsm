@@ -6,7 +6,13 @@ import { exists } from "../fsutil.ts";
 import { startUnit } from "../host/system.ts";
 import { fetchJson, installedNode, isNewer, NODE_INDEX, NODE_SCHEDULE } from "../host/updates.ts";
 import { unitStateOf } from "../instance/list.ts";
-import { instanceNames, isChanging, readRecord, runningRelease } from "../instance/record.ts";
+import {
+  instanceNames,
+  isChanging,
+  readRecord,
+  runningRelease,
+  unitName,
+} from "../instance/record.ts";
 import { verifyInstance } from "../instance/verify.ts";
 import { logChange } from "../log.ts";
 import { step } from "../output.ts";
@@ -165,7 +171,7 @@ export async function releaseUpdateNode({ ctx, args }: Invocation): Promise<void
       }
       if (state === "stopped") continue;
       try {
-        await startUnit(ctx, "restart", `dcabsm@${name}`);
+        await startUnit(ctx, "restart", unitName(name));
         step(ctx, "done", `Restarted ${name}`);
         const record = (await readRecord(ctx, name))!;
         const release = await runningRelease(ctx, name);

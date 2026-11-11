@@ -3,12 +3,13 @@ import { join } from "node:path";
 import type { Context } from "../context.ts";
 import { INSTANCES_LOGICAL } from "../paths.ts";
 import { systemctl } from "../host/system.ts";
+import { unitName } from "./record.ts";
 
 const GATE_FILE = "10-start-gate.conf";
 
 /** Where systemd looks for runtime drop-ins of one Instance's unit. It is under `/run`, so a boot wipes it. */
 export const gateDir = (ctx: Context, name: string): string =>
-  ctx.paths.under(`/run/systemd/system/dcabsm@${name}.service.d`);
+  ctx.paths.under(`/run/systemd/system/${unitName(name)}.service.d`);
 
 /**
  * The drop-in lifts the marker rule and nothing else. An empty `ConditionPathExists=` clears every

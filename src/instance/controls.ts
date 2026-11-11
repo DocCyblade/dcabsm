@@ -9,6 +9,7 @@ import {
   refuseIfChanging,
   requireInstance,
   runningRelease,
+  unitName,
   type InstanceRecord,
 } from "./record.ts";
 import { verifyInstance } from "./verify.ts";
@@ -55,8 +56,8 @@ async function targets(
 
 /** Stops the unit and keeps it from starting at boot (spec 4.8). */
 export async function stopInstance(ctx: Context, name: string): Promise<void> {
-  await systemctl(ctx, "stop", `dcabsm@${name}`);
-  await systemctl(ctx, "disable", `dcabsm@${name}`);
+  await systemctl(ctx, "stop", unitName(name));
+  await systemctl(ctx, "disable", unitName(name));
 }
 
 async function control(verb: Control, { ctx, args }: Invocation): Promise<void> {
@@ -64,7 +65,7 @@ async function control(verb: Control, { ctx, args }: Invocation): Promise<void> 
   const list = await targets(ctx, verb, positionals, values.all);
   let failed = 0;
   for (const { name, record } of list) {
-    const unit = `dcabsm@${name}`;
+    const unit = unitName(name);
     if (list.length > 1) ctx.io.out(name);
     try {
       if (verb === "stop") {
@@ -112,7 +113,7 @@ export async function instanceLogs({ ctx, args }: Invocation): Promise<void> {
   }
   const name = positionals[0]!;
   await requireInstance(ctx, name);
-  const journal = ["-u", `dcabsm@${name}`, "--no-pager"];
+  const journal = ["-u", unitName(name), "--no-pager"];
   if (values.since !== undefined) journal.push("--since", values.since);
   else journal.push("-n", "50");
   if (values.follow) journal.push("-f");

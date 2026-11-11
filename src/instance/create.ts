@@ -22,6 +22,7 @@ import {
   instanceDir,
   instanceNames,
   readRecord,
+  unitName,
   type InstanceRecord,
 } from "./record.ts";
 import { runResetTool } from "./reset-password.ts";
@@ -349,7 +350,7 @@ async function startAndVerify(
   record: InstanceRecord,
   release: string,
 ): Promise<void> {
-  const unit = `dcabsm@${name}`;
+  const unit = unitName(name);
   let seconds: number;
   try {
     await startUnit(ctx, "start", unit);

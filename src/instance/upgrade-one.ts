@@ -7,7 +7,7 @@ import { startUnit, systemctl } from "../host/system.ts";
 import { step } from "../output.ts";
 import { writeConfigJson } from "./files.ts";
 import { unitStateOf } from "./list.ts";
-import { instanceDir, removeMarker, writeMarker, type InstanceRecord } from "./record.ts";
+import { instanceDir, removeMarker, unitName, writeMarker, type InstanceRecord } from "./record.ts";
 import { restoreData } from "./restore-data.ts";
 import { withStartGate } from "./start-gate.ts";
 import { repointRelease, switchRelease } from "./switch.ts";
@@ -31,11 +31,9 @@ export interface UpgradeJob {
   to: string;
 }
 
-const unit = (name: string) => `dcabsm@${name}`;
-
 /** Starts the unit and checks it runs `release` (spec 6.2). */
 async function startAndVerify(ctx: Context, job: UpgradeJob, release: string): Promise<void> {
-  await startUnit(ctx, "start", unit(job.name));
+  await startUnit(ctx, "start", unitName(job.name));
   const seconds = await verifyInstance(ctx, job.name, job.record.port, release);
   step(ctx, "done", `Started and verified: /health UP, /info ${release} (${seconds}s)`);
 }
@@ -94,7 +92,7 @@ async function rollBack(
   const { name, from } = job;
   step(ctx, "warn", "Rolling back automatically");
   try {
-    await systemctl(ctx, "stop", unit(name));
+    await systemctl(ctx, "stop", unitName(name));
     await writeMarker(ctx, name, {
       operation: "upgrade",
       from,
@@ -108,12 +106,12 @@ async function rollBack(
     step(ctx, "done", `Switched back to ${from}`);
     await startAndVerifyChanging(ctx, job, from);
   } catch (err) {
-    await systemctl(ctx, "stop", unit(name)).catch(() => undefined);
+    await systemctl(ctx, "stop", unitName(name)).catch(() => undefined);
     step(ctx, "failed", `Automatic rollback failed: ${errorMessage(err)}`);
     return { kind: "stuck", why, backup };
   }
   await removeMarker(ctx, name);
-  if (!wasUp) await systemctl(ctx, "stop", unit(name));
+  if (!wasUp) await systemctl(ctx, "stop", unitName(name));
   return { kind: "rolled-back", why };
 }
 
@@ -129,7 +127,7 @@ export async function upgradeInstance(ctx: Context, job: UpgradeJob): Promise<Ou
   let backup: string;
   try {
     // Stopped first, so the Backup holds exactly what the old Release left (spec 6.1 steps 3 and 4).
-    await systemctl(ctx, "stop", unit(name));
+    await systemctl(ctx, "stop", unitName(name));
     step(ctx, "done", `Stopped ${name}`);
     backup = join(await backupRoot(ctx), name, await takeBackup(ctx, name, "pre-upgrade"));
     await writeMarker(ctx, name, { operation: "upgrade", from, to, backup, restoringData: false });
@@ -149,7 +147,7 @@ export async function upgradeInstance(ctx: Context, job: UpgradeJob): Promise<Ou
   await removeMarker(ctx, name);
   // A stopped or failed Instance returns to stopped once it has proved the new Release starts.
   if (!wasUp) {
-    await systemctl(ctx, "stop", unit(name));
+    await systemctl(ctx, "stop", unitName(name));
     step(ctx, "info", `${name} was stopped before the upgrade, so it is stopped again`);
   }
   return { kind: "upgraded" };
