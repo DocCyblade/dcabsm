@@ -464,7 +464,7 @@ Moves an Instance to a new hostname. If the current certificate covers the new h
   ✓ Nginx: nginx -t passed, reloaded
   ✓ Served certificate for kids.example.org confirmed
   · Devices must use https://kids.example.org now. Budgets on the old hostname stay in those browsers until removed.
-  ! OpenID: if this Instance uses it, update the hostname in Actual's OpenID settings and the provider's redirect URL.
+  ! OpenID login fails on the new name until Actual's OpenID settings and the provider's redirect URL are updated. Password login keeps working.
 ```
 
 Actual's OpenID settings still name the old hostname, so OpenID login fails until they and the provider are updated. Password login keeps working.
