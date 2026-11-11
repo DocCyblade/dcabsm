@@ -280,6 +280,7 @@ Read-only. Takes no lock.
   ✓ family: config, vhost, ownership, port, certificate 212 days
   · test: self-signed certificate, not trusted by system CAs
   ✓ Scheduled backups newer than 48 hours for every Instance
+  ✗ test has an unfinished Release change (upgrade, 26.10.0 → 26.11.1): run sudo dcabsm instance rollback test
 
 exit 1: 0 pass or notes, 1 warnings, 2 failures
 ```
