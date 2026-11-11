@@ -1,19 +1,21 @@
 import { chmod, rm, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { parseCommand } from "../args.ts";
+import { validateCertificateFiles, type CertificateInfo } from "../cert.ts";
 import type { Context } from "../context.ts";
 import { Cancelled, CliError, errorMessage, firstLine, refusal } from "../errors.ts";
 import { ensureDir, exists, writeFileAtomic } from "../fsutil.ts";
 import { hostHasIpv6 } from "../host/owned.ts";
 import { nginxTestFailure, systemctl } from "../host/system.ts";
 import { step } from "../output.ts";
+import { confirm } from "../prompt.ts";
 import {
   installedReleases,
   installRelease,
   latestStable,
   planRelease,
 } from "../release/install.ts";
-import { validateCertificateFiles, type CertificateInfo } from "../cert.ts";
+import type { Invocation } from "../table.ts";
 import { vhostConf, writeConfigJson } from "./files.ts";
 import {
   accountOf,
@@ -27,8 +29,6 @@ import {
 } from "./record.ts";
 import { runResetTool } from "./reset-password.ts";
 import { startVerified } from "./verify.ts";
-import { confirm } from "../prompt.ts";
-import type { Invocation } from "../table.ts";
 
 const SELF_SIGNED_DAYS = 397;
 
@@ -368,6 +368,20 @@ async function startAndVerify(
   }
 }
 
+/** Spec 4.6 step 8: on a terminal, without `--yes`, offers the first password. True once it is set. */
+async function offerPassword(ctx: Context, req: CreateRequest): Promise<boolean> {
+  if (req.yes || !ctx.io.interactive || !ctx.runner.inherit) return false;
+  if (!(await confirm(ctx, "Set the server password now?", { defaultYes: true }))) return false;
+  try {
+    await runResetTool(ctx, req.name);
+    return true;
+  } catch (err) {
+    // The Instance is fine, so a failed reset only keeps the warning (spec 4.6).
+    step(ctx, "warn", errorMessage(err));
+    return false;
+  }
+}
+
 /** `instance create <name> --hostname <host> (--cert <f> --key <f> | --self-signed) [--release <v>]` */
 export async function instanceCreate({ ctx, args }: Invocation): Promise<void> {
   const req = parseCreate(args);
@@ -391,18 +405,4 @@ export async function instanceCreate({ ctx, args }: Invocation): Promise<void> {
     );
   }
   ctx.io.out("Scheduled backups are on.");
-}
-
-/** Spec 4.6 step 8: on a terminal, without `--yes`, offers the first password. True once it is set. */
-async function offerPassword(ctx: Context, req: CreateRequest): Promise<boolean> {
-  if (req.yes || !ctx.io.interactive || !ctx.runner.inherit) return false;
-  if (!(await confirm(ctx, "Set the server password now?", { defaultYes: true }))) return false;
-  try {
-    await runResetTool(ctx, req.name);
-    return true;
-  } catch (err) {
-    // The Instance is fine, so a failed reset only keeps the warning (spec 4.6).
-    step(ctx, "warn", errorMessage(err));
-    return false;
-  }
 }
