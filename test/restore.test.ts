@@ -254,6 +254,7 @@ describe("instance restore", () => {
     const old = await start();
     expect(await restore(backups("shop", old))).toBe(2);
     expect(err()).toContain("instance restore --from");
+    expect(err()).toContain("(coming in a later release)");
     expect(await restore("shop.tar.gz")).toBe(2);
     expect(sysctls()).toEqual([]);
     expect(await readFile(inst("data", "notes"), "utf8")).toBe("v2");

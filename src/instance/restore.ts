@@ -188,7 +188,7 @@ export async function instanceRestore({ ctx, args }: Invocation): Promise<void> 
   if (name.includes("/") || name.endsWith(".tar.gz")) {
     throw refusal(
       `${name} looks like an archive, but a restore in place takes an Instance name first.`,
-      `To rebuild an Instance from an archive: sudo dcabsm instance restore --from ${name}`,
+      `To rebuild an Instance from an archive: sudo dcabsm instance restore --from ${name} (coming in a later release)`,
     );
   }
   checkName(name);
