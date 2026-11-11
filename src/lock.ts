@@ -73,3 +73,27 @@ export async function withLock<T>(ctx: Context, command: string, fn: () => Promi
     await release();
   }
 }
+
+/** How long the Nightly run waits for the lock before skipping an Instance (spec 8.2). */
+export const LOCK_WAIT_MS = 10 * 60 * 1000;
+const LOCK_POLL_MS = 5000;
+
+/**
+ * Like `acquireLock`, but waits for a live holder to finish, up to `waitMs`, then fails with the
+ * last holder's error. Only the Nightly run waits (spec 8.2).
+ */
+export async function acquireLockWaiting(
+  ctx: Context,
+  command: string,
+  waitMs = LOCK_WAIT_MS,
+): Promise<() => Promise<void>> {
+  const deadline = ctx.now().getTime() + waitMs;
+  for (;;) {
+    try {
+      return await acquireLock(ctx, command);
+    } catch (err) {
+      if (!(err instanceof CliError) || ctx.now().getTime() >= deadline) throw err;
+    }
+    await ctx.sleep(LOCK_POLL_MS);
+  }
+}
