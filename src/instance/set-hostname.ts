@@ -8,6 +8,7 @@ import { CliError, errorMessage, refusal } from "../errors.ts";
 import { readOrRefuse, writeFileAtomic } from "../fsutil.ts";
 import { nginxTestFailure, systemctl } from "../host/system.ts";
 import { step } from "../output.ts";
+import { snapshotFiles, type Snapshot } from "../rollback.ts";
 import type { Invocation } from "../table.ts";
 import {
   askForCertificate,
@@ -30,12 +31,7 @@ const USAGE =
   "Usage: dcabsm instance set-hostname <name> <host> [--cert <f> [--key <f>] | --self-signed]";
 
 /** The files a hostname change can touch, as they were, so a failure puts them back. */
-interface Saved {
-  record: string;
-  vhost: string;
-  cert: string;
-  key: string;
-}
+type Saved = Snapshot<"record" | "vhost" | "cert" | "key">;
 
 /** Where the new hostname's certificate comes from. */
 type Choice =
@@ -56,11 +52,11 @@ async function chooseCertificate(
   if (given.selfSigned) return { kind: "self-signed" };
   if (given.cert !== undefined) {
     const certPem = await readOrRefuse(given.cert, "certificate");
-    const keyPem = given.key === undefined ? saved.key : await readOrRefuse(given.key, "key");
+    const keyPem = given.key === undefined ? saved.text.key : await readOrRefuse(given.key, "key");
     return { kind: "given", info: validateCertificate(ctx, { certPem, keyPem, hostname }) };
   }
   try {
-    validateCertificate(ctx, { certPem: saved.cert, keyPem: saved.key, hostname });
+    validateCertificate(ctx, { certPem: saved.text.cert, keyPem: saved.text.key, hostname });
     return { kind: "current" };
   } catch {
     // Not covered (or no longer valid): the same prompt as create.
@@ -103,12 +99,12 @@ export async function instanceSetHostname({ ctx, args }: Invocation): Promise<vo
     cert: join(dir, "nginx", "cert.pem"),
     key: join(dir, "nginx", "key.pem"),
   };
-  const saved: Saved = {
-    record: await readOrRefuse(path.record, "Instance record"),
-    vhost: await readOrRefuse(path.vhost, "vhost"),
-    cert: await readOrRefuse(path.cert, "current certificate"),
-    key: await readOrRefuse(path.key, "current key"),
-  };
+  const saved: Saved = await snapshotFiles({
+    record: { path: path.record, what: "Instance record" },
+    vhost: { path: path.vhost, what: "vhost" },
+    cert: { path: path.cert, what: "current certificate" },
+    key: { path: path.key, what: "current key" },
+  });
   const choice = await chooseCertificate(ctx, hostname, saved, {
     cert: values.cert,
     key: values.key,
@@ -148,10 +144,7 @@ export async function instanceSetHostname({ ctx, args }: Invocation): Promise<vo
     step(ctx, "done", `Served certificate for ${hostname} confirmed`);
   } catch (err) {
     try {
-      await writeFileAtomic(path.cert, saved.cert, 0o600);
-      await writeFileAtomic(path.key, saved.key, 0o600);
-      await writeFileAtomic(path.record, saved.record, 0o600);
-      await writeFileAtomic(path.vhost, saved.vhost, 0o600);
+      await saved.putBack();
       if (reloaded) await systemctl(ctx, "reload", "nginx");
     } catch (again) {
       throw new CliError(
