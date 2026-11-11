@@ -312,5 +312,25 @@ id dcabsm-alpha > /dev/null 2>&1 || fail "restore --from did not create alpha's 
 expect_ok dcabsm instance list
 expect_in "alpha"
 
+step "Clone alpha from the Instance, then from an archive"
+echo "127.0.0.1 delta.test epsilon.test" >> /etc/hosts
+# Alpha's certificate does not cover delta.test, so a clone without certificate options is refused.
+expect_refusal "--self-signed" dcabsm instance clone alpha delta --hostname delta.test --yes
+expect_ok dcabsm instance clone alpha delta --hostname delta.test --self-signed --yes
+expect_in "Logins are copied"
+expect_in "OpenID"
+wait_for 60 up delta.test
+wait_for 30 up alpha.test
+expect_ok dcabsm backup list alpha
+expect_in "pre-clone"
+id dcabsm-delta > /dev/null 2>&1 || fail "clone did not create delta's account"
+expect_ok dcabsm instance clone --from /root/alpha-lost.tar.gz epsilon --hostname epsilon.test --self-signed
+wait_for 60 up epsilon.test
+expect_ok dcabsm instance list
+expect_in "delta"
+expect_in "epsilon"
+expect_ok dcabsm instance remove delta --confirm delta
+expect_ok dcabsm instance remove epsilon --confirm epsilon
+
 echo
 echo "journey: pinned journey passed ($n steps)"

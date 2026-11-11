@@ -60,7 +60,7 @@ export async function startArchiveHost(opts: StartOptions = {}): Promise<Archive
     join(hRef!.ctx.paths.instances, name, ...parts);
   const h = await harness({
     net,
-    startAt: opts.startAt,
+    startAt: opts.startAt ?? new Date(Date.now() + 60_000),
     interactive: opts.interactive,
     answers: opts.answers,
     runner: (command, args) => {
