@@ -15,6 +15,7 @@ import { instanceList, instanceShow } from "./instance/list.ts";
 import { instanceRemove } from "./instance/remove.ts";
 import { instanceUpgrade } from "./instance/upgrade.ts";
 import { instanceResetPassword } from "./instance/reset-password.ts";
+import { instanceSetHostname } from "./instance/set-hostname.ts";
 import { instanceSet, instanceSettings, instanceUnset } from "./instance/settings.ts";
 import { releaseList } from "./release/list.ts";
 import { selfMigrate } from "./self/migrations.ts";
@@ -164,6 +165,7 @@ export const table: Noun[] = [
         usage: "set-hostname <name> <host> [--cert <f> [--key <f>] | --self-signed]",
         summary: "Move an Instance to a new hostname",
         changes: true,
+        run: instanceSetHostname,
       },
       {
         name: "reset-password",

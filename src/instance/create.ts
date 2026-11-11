@@ -76,7 +76,8 @@ async function nginxHostnames(ctx: Context): Promise<Set<string>> {
   return names;
 }
 
-async function hostnameInUse(ctx: Context, hostname: string): Promise<string | undefined> {
+/** Another Instance or Nginx already uses the hostname: why, or undefined (spec 4.6). */
+export async function hostnameInUse(ctx: Context, hostname: string): Promise<string | undefined> {
   for (const name of await instanceNames(ctx)) {
     if ((await readRecord(ctx, name))?.hostname === hostname) {
       return `Instance ${name} already uses ${hostname}.`;
@@ -106,7 +107,7 @@ async function freePort(ctx: Context): Promise<number> {
 }
 
 /** Where an Instance's certificate comes from. */
-type CertSource = { kind: "self-signed" } | { kind: "given"; info: CertificateInfo };
+export type CertSource = { kind: "self-signed" } | { kind: "given"; info: CertificateInfo };
 
 /** The certificate files named on the command line. */
 interface CertFiles {
@@ -178,13 +179,18 @@ async function chooseCertificate(ctx: Context, req: CreateRequest): Promise<Cert
     const info = await validateCertificateFiles(ctx, { ...req.cert, hostname: req.hostname });
     return { kind: "given", info };
   }
+  return askForCertificate(ctx, req.hostname);
+}
+
+/** With no certificate given: asks on a terminal for a self-signed one, or refuses (spec 4.6 step 3). */
+export async function askForCertificate(ctx: Context, hostname: string): Promise<CertSource> {
   if (!ctx.io.interactive) {
     throw refusal(
       "No terminal to ask for a certificate on.",
       "Re-run with --cert <f> --key <f>, or --self-signed.",
     );
   }
-  ctx.io.out(`No certificate given for ${req.hostname}. Every Instance must have one.`);
+  ctx.io.out(`No certificate given for ${hostname}. Every Instance must have one.`);
   const answer = (
     await ctx.io.ask("  [1] self-signed now  [2] cancel (re-run with --cert/--key): ")
   ).trim();
@@ -246,7 +252,7 @@ async function writeConfigFiles(
 }
 
 /** Puts `cert.pem` and `key.pem` in the Instance's `nginx/`, root-only (spec 5.5). */
-async function writeCertificate(
+export async function writeCertificate(
   ctx: Context,
   name: string,
   hostname: string,
@@ -280,7 +286,7 @@ async function writeCertificate(
   for (const file of ["key.pem", "cert.pem"]) await chmod(join(nginx, file), 0o600);
 }
 
-function reportCertificate(ctx: Context, hostname: string, source: CertSource): void {
+export function reportCertificate(ctx: Context, hostname: string, source: CertSource): void {
   if (source.kind === "given") {
     step(ctx, "done", `Certificate for ${hostname}, ${source.info.daysLeft} days left`);
     for (const warning of source.info.warnings) step(ctx, "warn", warning);
