@@ -1,5 +1,6 @@
 import type { Context } from "./context.ts";
 import { hostDoctor } from "./host/doctor.ts";
+import { hostNightly } from "./host/nightly.ts";
 import { hostSet, hostSettings } from "./host/settings.ts";
 import { hostSetup } from "./host/setup.ts";
 import { hostCheckUpdates } from "./host/updates.ts";
@@ -7,6 +8,7 @@ import { releaseInstall } from "./release/install.ts";
 import { backupCreate } from "./backup/create.ts";
 import { backupList } from "./backup/list.ts";
 import { backupPrune } from "./backup/prune.ts";
+import { backupSchedule } from "./backup/schedule.ts";
 import { certTest } from "./certs/test.ts";
 import { certUpdate } from "./certs/update.ts";
 import { instanceCreate } from "./instance/create.ts";
@@ -103,7 +105,8 @@ export const table: Noun[] = [
         usage: "nightly",
         summary: "The Nightly run, started by the dcabsm-nightly service",
         hidden: true,
-        changes: true,
+        // It takes the lock per Instance itself and logs its own line (spec 8.2).
+        run: hostNightly,
       },
     ],
   },
@@ -243,6 +246,7 @@ export const table: Noun[] = [
         usage: "schedule <name> on|off",
         summary: "Switch scheduled Backups on or off for one Instance",
         changes: true,
+        run: backupSchedule,
       },
     ],
   },

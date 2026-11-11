@@ -122,6 +122,9 @@ export async function harness(opts: HarnessOptions = {}): Promise<Harness> {
       arch: opts.arch ?? "x64",
       env: opts.env ?? {},
       now: () => new Date((opts.startAt ?? new Date("2026-11-09T12:00:00Z")).getTime() + elapsedMs),
+      async sleep(ms) {
+        elapsedMs += ms;
+      },
     },
     out,
     err,

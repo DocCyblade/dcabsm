@@ -47,4 +47,6 @@ export interface Context {
   /** Environment variables, such as the `DCABSM_ALLOW_*` overrides. */
   env: Record<string, string | undefined>;
   now(): Date;
+  /** Waits `ms`. The Nightly run's lock wait is the only user; tests move the fake clock instead. */
+  sleep(ms: number): Promise<void>;
 }
