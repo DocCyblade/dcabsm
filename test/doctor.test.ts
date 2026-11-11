@@ -1,4 +1,5 @@
 import { chmod, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { run } from "../src/cli.ts";
 import { hashOf } from "../src/host/owned.ts";
@@ -337,6 +338,45 @@ describe("Backups and the rest of the Host", () => {
     );
     await doctor();
     expect(text()).toContain("✓ Firewall allows 80 and 443");
+  });
+});
+
+describe("an unfinished Release change", () => {
+  it("fails for an Instance with a .changing-release marker, pointing to instance rollback", async () => {
+    await setUpHost();
+    const dir = at("/srv/dcabsm/instances/family");
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      join(dir, ".changing-release"),
+      JSON.stringify({
+        operation: "upgrade",
+        from: "26.10.0",
+        to: "26.11.1",
+        backup: "/x",
+        restoringData: false,
+      }),
+    );
+    expect(await doctor()).toBe(2);
+    expect(text()).toContain(
+      "✗ family has an unfinished Release change (upgrade, 26.10.0 → 26.11.1): run sudo dcabsm instance rollback family",
+    );
+  });
+
+  it("still reports a marker that cannot be read", async () => {
+    await setUpHost();
+    const dir = at("/srv/dcabsm/instances/family");
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, ".changing-release"), "not json");
+    expect(await doctor()).toBe(2);
+    expect(text()).toContain(
+      "✗ family has an unfinished Release change: run sudo dcabsm instance rollback family",
+    );
+  });
+
+  it("passes when no Instance has a marker", async () => {
+    await setUpHost();
+    await mkdir(at("/srv/dcabsm/instances/family"), { recursive: true });
+    expect(await doctor()).toBe(0);
   });
 });
 

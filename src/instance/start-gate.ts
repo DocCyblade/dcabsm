@@ -3,7 +3,8 @@ import { join } from "node:path";
 import type { Context } from "../context.ts";
 import { INSTANCES_LOGICAL } from "../paths.ts";
 import { systemctl } from "../host/system.ts";
-import { unitName } from "./record.ts";
+import { unitName, type InstanceRecord } from "./record.ts";
+import { startVerified } from "./verify.ts";
 
 const GATE_FILE = "10-start-gate.conf";
 
@@ -42,3 +43,11 @@ export async function withStartGate<T>(
     await systemctl(ctx, "daemon-reload").catch(() => undefined);
   }
 }
+
+/** Starts and verifies `release` with the unit's marker rule lifted (spec 6.1 step 7). */
+export const startThroughGate = (
+  ctx: Context,
+  job: { name: string; record: InstanceRecord },
+  release: string,
+): Promise<void> =>
+  withStartGate(ctx, job.name, () => startVerified(ctx, job.name, job.record.port, { release }));

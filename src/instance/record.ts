@@ -33,9 +33,21 @@ export const instanceDir = (ctx: Context, name: string): string => join(ctx.path
 export const recordPath = (ctx: Context, name: string): string =>
   join(instanceDir(ctx, name), "config", "instance.json");
 
+/** The record in `text`, or undefined when it is not JSON or has no port and hostname. The one reader of `instance.json`. */
+export function parseRecord(text: string): InstanceRecord | undefined {
+  try {
+    const record = JSON.parse(text) as InstanceRecord;
+    return typeof record?.port === "number" && typeof record.hostname === "string"
+      ? record
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function readRecord(ctx: Context, name: string): Promise<InstanceRecord | undefined> {
   try {
-    return JSON.parse(await readFile(recordPath(ctx, name), "utf8")) as InstanceRecord;
+    return parseRecord(await readFile(recordPath(ctx, name), "utf8"));
   } catch {
     return undefined;
   }
@@ -113,14 +125,19 @@ export async function readMarker(ctx: Context, name: string): Promise<ChangeMark
 export const removeMarker = (ctx: Context, name: string): Promise<void> =>
   rm(changingMarker(ctx, name), { force: true });
 
+/** " (upgrade, 26.10.0 → 26.11.1)" for the marker, or "" when it cannot be read. */
+export async function changeDetail(ctx: Context, name: string): Promise<string> {
+  const marker = await readMarker(ctx, name);
+  return marker ? ` (${marker.operation}, ${marker.from} → ${marker.to})` : "";
+}
+
 /**
  * The one rule for an unfinished Release change (spec 6.6): every changing command for the Instance
  * calls this and refuses, except `instance rollback`, which is how the change is finished.
  */
 export async function refuseIfChanging(ctx: Context, name: string): Promise<void> {
   if (!(await isChanging(ctx, name))) return;
-  const marker = await readMarker(ctx, name);
-  const detail = marker ? ` (${marker.operation}, ${marker.from} → ${marker.to})` : "";
+  const detail = await changeDetail(ctx, name);
   throw refusal(
     `${name} has an unfinished Release change${detail}.`,
     `Only rollback can run now: sudo dcabsm instance rollback ${name}`,
@@ -130,9 +147,7 @@ export async function refuseIfChanging(ctx: Context, name: string): Promise<void
 /** One line for list and show: what is unfinished, or undefined when nothing is. */
 export async function changeSummary(ctx: Context, name: string): Promise<string | undefined> {
   if (!(await isChanging(ctx, name))) return undefined;
-  const marker = await readMarker(ctx, name);
-  const detail = marker ? ` (${marker.operation}, ${marker.from} → ${marker.to})` : "";
-  return `unfinished Release change${detail}`;
+  return `unfinished Release change${await changeDetail(ctx, name)}`;
 }
 
 /** The Release the Instance's `release` link points to. */

@@ -1,17 +1,14 @@
 import { mkdir, readFile, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { backupRoot } from "../backup/archive.ts";
 import { reportCertificate, writeCertificate, type CertSource } from "../certs/provide.ts";
 import type { Context } from "../context.ts";
 import { Cancelled, CliError, errorMessage, firstLine } from "../errors.ts";
-import { exists } from "../fsutil.ts";
 import { nginxTestFailure, systemctl } from "../host/system.ts";
 import { step } from "../output.ts";
 import { createAccount, makeDirectories, writeConfigFiles } from "./create.ts";
 import { writeVhost } from "./files.ts";
-import { regroup } from "./regroup.ts";
-import { accountOf, instanceDir, type InstanceRecord } from "./record.ts";
-import { chownData, DATA_DIRS } from "./restore-data.ts";
+import { accountOf, instanceDir, parseRecord, type InstanceRecord } from "./record.ts";
+import { DATA_DIRS, regroupData, regroupedLine } from "./restore-data.ts";
 
 /** What `instance restore --from` and `instance clone` read out of an archive before they build. */
 export interface Stage {
@@ -52,13 +49,14 @@ export async function extractArchive(ctx: Context, archive: string, label: strin
         `tar could not read ${archive}: ${firstLine(res.stderr, `exit ${res.code}`)}`,
       );
     }
-    let record: InstanceRecord;
-    try {
-      record = JSON.parse(await readFile(join(dir, "config", "instance.json"), "utf8"));
-    } catch {
+    const text = await readFile(join(dir, "config", "instance.json"), "utf8").catch(
+      () => undefined,
+    );
+    if (text === undefined) {
       throw new CliError(`${archive} holds no readable config/instance.json.`);
     }
-    if (typeof record.port !== "number" || typeof record.hostname !== "string") {
+    const record = parseRecord(text);
+    if (!record) {
       throw new CliError(`${archive} holds an Instance record without a port or hostname.`);
     }
     const read = async (file: string) => {
@@ -109,16 +107,11 @@ export async function buildInstance(ctx: Context, plan: BuildPlan): Promise<void
       await rm(join(dir, d), { recursive: true, force: true });
       await rename(join(stage.dir, d), join(dir, d));
     }
-    const serverFiles = join(dir, "server-files");
-    // An Instance that never started has no `account.sqlite` and nothing to regroup.
-    const count = (await exists(join(serverFiles, "account.sqlite")))
-      ? await regroup(serverFiles, join(dir, "user-files"))
-      : 0;
-    await chownData(ctx, name);
+    const count = await regroupData(ctx, name);
     step(
       ctx,
       "done",
-      `Data copied, ownership set for ${accountOf(name)}; regrouped ${count} Budget file${count === 1 ? "" : "s"}`,
+      `Data copied, ownership set for ${accountOf(name)}; ${regroupedLine(count).toLowerCase()}`,
     );
 
     await writeConfigFiles(ctx, name, record, release);
@@ -138,9 +131,4 @@ export async function buildInstance(ctx: Context, plan: BuildPlan): Promise<void
       ? err
       : new CliError(`Could not build ${name}: ${errorMessage(err)}`);
   }
-}
-
-/** The path of an archive in the source's Backups, from the file name `takeBackup` returned. */
-export async function backupPath(ctx: Context, source: string, file: string): Promise<string> {
-  return join(await backupRoot(ctx), source, file);
 }

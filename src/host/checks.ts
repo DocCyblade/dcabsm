@@ -1,6 +1,7 @@
 import type { Context } from "../context.ts";
 import { firstLine } from "../errors.ts";
 import { exists } from "../fsutil.ts";
+import { changeChecks } from "./changes.ts";
 import { certChecks } from "../certs/doctor.ts";
 import { healthChecks } from "./health.ts";
 import { detectOs, supportedNames } from "./os.ts";
@@ -240,6 +241,7 @@ export const hostChecks: Check[] = [
   ...healthChecks,
   ...treeChecks,
   ...certChecks,
+  ...changeChecks,
 ];
 
 /** Setup runs the checks that refuse. Nothing here changes the Host. */

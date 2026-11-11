@@ -1,7 +1,7 @@
-import { basename, join } from "node:path";
+import { basename } from "node:path";
 import { parseCommand } from "../args.ts";
-import { backupRoot, listArchives, stampTime, type ArchiveInfo } from "../backup/archive.ts";
-import { checkSpace, RUNNING_STATES, takeBackup } from "../backup/create.ts";
+import { listArchives, stampTime, type ArchiveInfo } from "../backup/archive.ts";
+import { checkSpace, RUNNING_STATES } from "../backup/create.ts";
 import type { Context } from "../context.ts";
 import { CliError, errorMessage, refusal } from "../errors.ts";
 import { systemctl } from "../host/system.ts";
@@ -12,7 +12,6 @@ import { installRelease } from "../release/install.ts";
 import type { Invocation } from "../table.ts";
 import { beforeRestoreAdvice, deviceAdvice } from "./device-advice.ts";
 import { unitStateOf } from "./list.ts";
-import { regroup } from "./regroup.ts";
 import {
   accountOf,
   checkName,
@@ -27,32 +26,18 @@ import {
   type ChangeMarker,
   type InstanceRecord,
 } from "./record.ts";
-import { chownData, restoreData } from "./restore-data.ts";
-import { SETTINGS, usedBy } from "./setting-table.ts";
-import { withStartGate } from "./start-gate.ts";
+import { regroupedLine, restoreAndRegroup, restoreData, stopAndBackUp } from "./restore-data.ts";
+import { reportUnusedSettings } from "./setting-table.ts";
+import { startThroughGate } from "./start-gate.ts";
 import { switchRelease } from "./switch.ts";
 import { planIfMissing } from "./upgrade-plan.ts";
-import { startVerified } from "./verify.ts";
 
-const USAGE = "Usage: dcabsm instance rollback <name> [--restore-data] [--confirm <name>]";
+const USAGE = "Usage: dcabsm instance rollback <name> [--restore-data] [--yes] [--confirm <name>]";
 
 interface Job {
   name: string;
   record: InstanceRecord;
   wasUp: boolean;
-}
-
-/** Starts and verifies `release` with the unit's marker rule lifted (spec 6.1 step 7). */
-const startThroughGate = (ctx: Context, job: Job, release: string): Promise<void> =>
-  withStartGate(ctx, job.name, () => startVerified(ctx, job.name, job.record.port, { release }));
-
-/** Names the settings the Release can't use (spec 4.11): the record keeps them for a later Upgrade. */
-function reportUnusedSettings(ctx: Context, record: InstanceRecord, release: string): void {
-  for (const def of SETTINGS) {
-    if (record.settings?.[def.key] !== undefined && !usedBy(def, release)) {
-      step(ctx, "info", `${def.key}: not used by ${release}`);
-    }
-  }
 }
 
 function bannerAdvice(ctx: Context): void {
@@ -144,16 +129,13 @@ async function undoRestore(ctx: Context, job: Job, preRestore: string, from: str
 /** Replaces the data from `archive`, regroups, moves to `to` and starts (spec 7.4 steps 4 and 5). */
 async function restoreAndStart(ctx: Context, job: Job, archive: string, to: string) {
   const { name } = job;
-  await restoreData(ctx, name, archive);
+  const count = await restoreAndRegroup(ctx, name, archive);
   step(
     ctx,
     "done",
     `Restored data from ${basename(archive)}; ownership set for ${accountOf(name)}`,
   );
-  const dir = instanceDir(ctx, name);
-  const count = await regroup(join(dir, "server-files"), join(dir, "user-files"));
-  await chownData(ctx, name);
-  step(ctx, "done", `Regrouped ${count} Budget file${count === 1 ? "" : "s"}`);
+  step(ctx, "done", regroupedLine(count));
   await switchRelease(ctx, name, job.record, to);
   step(ctx, "done", `On Release ${to}, config.json regenerated`);
   await startThroughGate(ctx, job, to);
@@ -169,16 +151,7 @@ async function rollBackRestoringData(
 ): Promise<void> {
   const { name } = job;
   const unit = unitName(name);
-  await systemctl(ctx, "stop", unit);
-  step(ctx, "done", `Stopped ${name}`);
-  let preRestore: string;
-  try {
-    preRestore = join(await backupRoot(ctx), name, await takeBackup(ctx, name, "pre-restore"));
-  } catch (err) {
-    // Nothing has changed yet, so a running Instance goes back up as it was.
-    if (job.wasUp) await systemctl(ctx, "start", unit).catch(() => undefined);
-    throw err;
-  }
+  const preRestore = await stopAndBackUp(ctx, name, job.wasUp);
   await writeMarker(ctx, name, {
     operation: "rollback",
     from,
@@ -198,7 +171,7 @@ async function rollBackRestoringData(
       step(ctx, "failed", `Automatic rollback failed: ${errorMessage(again)}`);
       throw new CliError(
         `Rollback of ${name} failed, and so did the automatic return. ${name} stays stopped.`,
-        `Its pre-restore backup is kept: ${preRestore}\n  Then try: sudo dcabsm instance rollback ${name}`,
+        `Its pre-restore Backup is kept: ${preRestore}\n  Then try: sudo dcabsm instance rollback ${name}`,
       );
     }
     await settle(ctx, job);
@@ -258,7 +231,7 @@ async function pickPreUpgrade(ctx: Context, name: string): Promise<ArchiveInfo> 
   if (!newest) {
     throw refusal(
       `${name} has no Pre-upgrade backup to go back to.`,
-      `See its backups: sudo dcabsm backup list ${name}`,
+      `See its Backups: sudo dcabsm backup list ${name}`,
     );
   }
   return newest;
@@ -295,7 +268,7 @@ async function finishInterrupted(ctx: Context, job: Job, yes: boolean): Promise<
   if (done.restored) deviceAdvice(ctx);
 }
 
-/** `instance rollback <name> [--restore-data] [--confirm <name>]` (spec 6.5, 6.6) */
+/** `instance rollback <name> [--restore-data] [--yes] [--confirm <name>]` (spec 6.5, 6.6) */
 export async function instanceRollback({ ctx, args }: Invocation): Promise<void> {
   const { values, positionals } = parseCommand(args, {
     "restore-data": { type: "boolean" },

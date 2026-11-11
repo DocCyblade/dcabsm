@@ -209,7 +209,7 @@ export const table: Noun[] = [
       },
       {
         name: "rollback",
-        usage: "rollback <name> [--restore-data] [--confirm <name>]",
+        usage: "rollback <name> [--restore-data] [--yes] [--confirm <name>]",
         summary: "Go back one step to the previous Release",
         changes: true,
         run: instanceRollback,

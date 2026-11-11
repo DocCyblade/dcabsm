@@ -1,36 +1,23 @@
-import { stat } from "node:fs/promises";
 import { basename } from "node:path";
-import { readManifest } from "../backup/archive.ts";
+import { readManifest, requireArchiveFile } from "../backup/archive.ts";
 import { hostnameInUse, type CertSource } from "../certs/provide.ts";
 import { inspectChain } from "../cert.ts";
 import type { Context } from "../context.ts";
 import { refusal } from "../errors.ts";
+import { exists } from "../fsutil.ts";
 import { logChange } from "../log.ts";
 import { step } from "../output.ts";
 import { installRelease } from "../release/install.ts";
-import { checkHostname, freePort, startAndVerify, takenPorts } from "./create.ts";
+import { checkHostname, freePort, startAndVerify } from "./create.ts";
 import { deviceAdvice } from "./device-advice.ts";
 import { buildInstance, extractArchive } from "./from-archive.ts";
 import { checkName, instanceDir, type InstanceRecord } from "./record.ts";
+import { reportUnusedSettings } from "./setting-table.ts";
 import { planIfMissing } from "./upgrade-plan.ts";
-import { exists } from "../fsutil.ts";
-import { SETTINGS, usedBy } from "./setting-table.ts";
-
-/** Names the settings the Release can't use (spec 4.11): the record keeps them for a later Upgrade. */
-export function reportUnusedSettings(ctx: Context, record: InstanceRecord, release: string): void {
-  for (const def of SETTINGS) {
-    if (record.settings?.[def.key] !== undefined && !usedBy(def, release)) {
-      step(ctx, "info", `${def.key}: not used by ${release}`);
-    }
-  }
-}
 
 /** `instance restore --from <archive>` (spec 7.7): rebuilds an Instance that does not exist here. */
 export async function restoreFrom(ctx: Context, archive: string): Promise<void> {
-  const found = await stat(archive).catch(() => undefined);
-  if (!found?.isFile()) {
-    throw refusal(`${archive} is not an archive file.`, "Give the path of a .tar.gz archive.");
-  }
+  await requireArchiveFile(archive);
   const manifest = await readManifest(ctx, archive);
   const name = manifest.name;
   checkName(name);
@@ -59,7 +46,7 @@ export async function restoreFrom(ctx: Context, archive: string): Promise<void> 
         "Free the hostname first, or make a new Instance from the archive: sudo dcabsm instance clone --from <archive> <new-name> --hostname <host>",
       );
     }
-    const port = (await takenPorts(ctx)).has(archived.port) ? await freePort(ctx) : archived.port;
+    const port = await freePort(ctx, archived.port);
     const record: InstanceRecord = { ...archived, port };
     step(
       ctx,

@@ -206,6 +206,27 @@ wait_for 60 up alpha.test
 run info alpha.test
 expect_in "26.11.0"
 
+step "Roll alpha back restoring its data, then upgrade it again"
+# A file made after the Pre-upgrade backup is gone once that backup's data is put back.
+touch /srv/dcabsm/instances/alpha/server-files/journey-after-upgrade
+expect_refusal "--confirm" dcabsm instance rollback alpha --restore-data --yes
+expect_ok dcabsm instance rollback alpha --restore-data --confirm alpha
+expect_in "Regrouped"
+expect_in "Click Update now"
+wait_for 60 up alpha.test
+run info alpha.test
+expect_in "26.10.0"
+[ ! -e /srv/dcabsm/instances/alpha/server-files/journey-after-upgrade ] ||
+  fail "rollback --restore-data kept data made after the Pre-upgrade backup"
+[ ! -e /srv/dcabsm/instances/alpha/.changing-release ] || fail "the change marker was left behind by rollback --restore-data"
+expect_ok dcabsm backup list alpha
+expect_in "pre-restore"
+up beta.test || fail "rolling alpha back with its data took beta down"
+expect_ok dcabsm instance upgrade alpha --to 26.11.0 --yes
+wait_for 60 up alpha.test
+run info alpha.test
+expect_in "26.11.0"
+
 step "Node patches: nothing newer is pinned, and the Instances stay up"
 expect_ok dcabsm release update-node --yes
 wait_for 30 up alpha.test

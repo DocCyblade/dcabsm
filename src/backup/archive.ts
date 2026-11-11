@@ -42,6 +42,19 @@ export async function backupRoot(ctx: Context): Promise<string> {
   return ctx.paths.under(await logicalBackupRoot(ctx));
 }
 
+/** The path of an archive in an Instance's Backups, from the file name `takeBackup` returned. */
+export async function backupPath(ctx: Context, name: string, file: string): Promise<string> {
+  return join(await backupRoot(ctx), name, file);
+}
+
+/** Refuses a path that is not a file: the check for an archive given on the command line. */
+export async function requireArchiveFile(archive: string): Promise<void> {
+  const found = await stat(archive).catch(() => undefined);
+  if (!found?.isFile()) {
+    throw refusal(`${archive} is not an archive file.`, "Give the path of a .tar.gz archive.");
+  }
+}
+
 /** `20261107T141200Z` */
 export function timeStamp(d: Date): string {
   return d
