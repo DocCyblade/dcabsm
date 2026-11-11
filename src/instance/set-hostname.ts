@@ -2,6 +2,12 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseCommand } from "../args.ts";
 import { inspectChain, validateCertificate, type CertificateInfo } from "../cert.ts";
+import {
+  askForCertificate,
+  hostnameInUse,
+  reportCertificate,
+  writeCertificate,
+} from "../certs/provide.ts";
 import { confirmServed, SERVE_SECONDS } from "../certs/probe.ts";
 import type { Context } from "../context.ts";
 import { CliError, errorMessage, refusal } from "../errors.ts";
@@ -10,13 +16,7 @@ import { nginxTestFailure, systemctl } from "../host/system.ts";
 import { step } from "../output.ts";
 import { snapshotFiles, type Snapshot } from "../rollback.ts";
 import type { Invocation } from "../table.ts";
-import {
-  askForCertificate,
-  checkHostname,
-  hostnameInUse,
-  reportCertificate,
-  writeCertificate,
-} from "./create.ts";
+import { checkHostname } from "./create.ts";
 import { vhostPath, writeVhost } from "./files.ts";
 import {
   instanceDir,
