@@ -39,6 +39,8 @@ export interface FakeHost {
   /** The device `df` reports for the backup directory and for the Instance data. */
   backupDevice: string;
   dataDevice: string;
+  /** How many physical disks `lsblk` lists. 0 makes `lsblk` fail. */
+  disks: number;
   systemctl(args: string[]): RunResult;
   run(command: string, args: string[]): RunResult;
 }
@@ -58,6 +60,7 @@ export function fakeHost(overrides: Partial<FakeHost> = {}): FakeHost {
     ufw: "",
     backupDevice: "/dev/vdb1",
     dataDevice: "/dev/vda1",
+    disks: 2,
     ...overrides,
     systemctl(args) {
       const unit = (args.filter((a) => !a.startsWith("--")).pop() ?? "").replace(/\.service$/, "");
@@ -89,6 +92,11 @@ export function fakeHost(overrides: Partial<FakeHost> = {}): FakeHost {
       if (command === "nginx") return host.nginxTest;
       if (command === "systemctl") return host.systemctl(args);
       if (command === "ufw") return host.ufw === "" ? fail("not found", 127) : ok(host.ufw);
+      if (command === "lsblk") {
+        return host.disks === 0
+          ? fail("lsblk: not found", 127)
+          : ok("disk\n".repeat(host.disks) + "loop\n");
+      }
       if (command === "df") {
         const dev = args[args.length - 1]!.includes("/instances")
           ? host.dataDevice

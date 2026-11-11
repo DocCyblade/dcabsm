@@ -285,6 +285,19 @@ describe("Backups and the rest of the Host", () => {
     expect(text()).toContain("! Backups share a disk with Instance data (/dev/vda1)");
   });
 
+  it("only notes it when that is the one disk on the Host, and exits 0", async () => {
+    await setUpHost(fakeHost({ backupDevice: "/dev/vda1", disks: 1 }));
+    expect(await doctor()).toBe(0);
+    expect(text()).toContain(
+      "· Backups share a disk with Instance data (/dev/vda1), the only disk on this Host",
+    );
+  });
+
+  it("still warns when lsblk cannot say how many disks there are", async () => {
+    await setUpHost(fakeHost({ backupDevice: "/dev/vda1", disks: 0 }));
+    expect(await doctor()).toBe(1);
+  });
+
   it("notes a missing bash-completion package", async () => {
     const host = fakeHost();
     await setUpHost(host);

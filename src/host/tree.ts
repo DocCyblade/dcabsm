@@ -195,16 +195,26 @@ async function deviceOf(ctx: Context, path: string): Promise<string | undefined>
   return res.code === 0 ? res.stdout.split("\n")[1]?.trim().split(/\s+/)[0] : undefined;
 }
 
+/** How many physical disks `lsblk` lists, or undefined if it can't tell. */
+async function diskCount(ctx: Context): Promise<number | undefined> {
+  const res = await ctx.runner.run("lsblk", ["-dn", "-o", "TYPE"]);
+  if (res.code !== 0) return undefined;
+  const count = res.stdout.split("\n").filter((line) => line.trim() === "disk").length;
+  return count > 0 ? count : undefined;
+}
+
 async function sharedDisk(ctx: Context): Promise<CheckResult[]> {
   const backups = await deviceOf(ctx, ctx.paths.under(await logicalBackupDir(ctx)));
   const data = await deviceOf(ctx, ctx.paths.instances);
   if (backups === undefined || data === undefined) return [];
   if (backups !== data) return pass("Backups are on their own disk");
+  // With a single disk there is nowhere else to put them, so it is only a note.
+  const onlyDisk = (await diskCount(ctx)) === 1;
   return [
     {
       kind: "problem",
-      severity: "warn",
-      message: `Backups share a disk with Instance data (${data})`,
+      severity: onlyDisk ? "note" : "warn",
+      message: `Backups share a disk with Instance data (${data})${onlyDisk ? ", the only disk on this Host" : ""}`,
       hint: "One failing disk would take both. Moving Backups is a Manual System Admin task.",
     },
   ];
