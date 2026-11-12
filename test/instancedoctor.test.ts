@@ -410,6 +410,19 @@ describe("Backups", () => {
     expect(text()).toContain("! family: no scheduled Backup in the last 48 hours");
   });
 
+  for (const [what, value] of [
+    ["in the future", "2099-01-01T00:00:00Z"],
+    ["not a date", "yesterday-ish"],
+  ] as const) {
+    it(`counts a creation time that is ${what} as not young, so it still warns`, async () => {
+      await familyHost();
+      await scheduledOn();
+      await createdAt(value);
+      expect(await doctor()).toBe(1);
+      expect(text()).toContain("! family: no scheduled Backup in the last 48 hours");
+    });
+  }
+
   it("keeps warning for an older Instance whose record has no creation time", async () => {
     await familyHost();
     await scheduledOn();

@@ -61,10 +61,11 @@ export interface InstanceRow {
 
 const OVERDUE_MS = 48 * 60 * 60 * 1000;
 
-/** Younger than 48 hours by its recorded creation time: no Nightly run is due yet. Unknown age is not young. */
+/** Younger than 48 hours by its recorded creation time: no Nightly run is due yet. Unknown age, or a creation time in the future, is not young. */
 function isYoung(ctx: Context, record: InstanceRecord): boolean {
   const created = Date.parse(record.createdAt ?? "");
-  return !Number.isNaN(created) && ctx.now().getTime() - created < OVERDUE_MS;
+  const age = ctx.now().getTime() - created;
+  return age >= 0 && age < OVERDUE_MS; // NaN (unparsable) and a future date are both false
 }
 
 /** The LAST SCHEDULED column (docs/cli.md) and whether the schedule looks broken. */
