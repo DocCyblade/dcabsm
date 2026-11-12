@@ -129,7 +129,7 @@ mkdir -p "$opt"
 stage="$opt/.install-$version"
 rm -rf "$stage"
 mkdir -p "$stage"
-tar -xzf "$tmp/$file" -C "$stage" --strip-components=1 || {
+tar -xzf "$tmp/$file" -C "$stage" --strip-components=1 --no-same-owner || {
   rm -rf "$stage"
   die "could not extract $file."
 }

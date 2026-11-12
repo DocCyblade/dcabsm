@@ -49,6 +49,13 @@ describe("self update", () => {
     expect(h.out).toContain("  ✓ Removed /opt/dcabsm/1.0.0/ (keeps current and previous)");
   });
 
+  it("unpacks the tarball with the owner of the user running it, not the one it names", async () => {
+    await start();
+    expect(await update()).toBe(0);
+    const untar = h.calls.find((c) => c.command === "tar" && c.args[0] === "-xzf");
+    expect(untar?.args).toContain("--no-same-owner");
+  });
+
   it("checks the signature only against the installed key", async () => {
     await start();
     await update();
