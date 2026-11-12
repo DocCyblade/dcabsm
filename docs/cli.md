@@ -282,11 +282,22 @@ Read-only. Takes no lock.
   ✓ Scheduled backups newer than 48 hours for every Instance
   ✗ test has an unfinished Release change (upgrade, 26.10.0 → 26.11.1): run sudo dcabsm instance rollback test
 
-exit 1: 0 pass or notes, 1 warnings, 2 failures
+exit 2: this run has one failure (✗), three warnings (!) and two notes (·)
 ```
+
+The exit code is `0` for a pass or notes only, `1` for warnings and `2` for any failure (spec 9), so the example above ends with `2`.
 
 - `--fix` takes the lock and asks for each problem it can fix: `fix / skip / all? [f/s/a]`. Files get a diff first, and old copies are saved to `/etc/dcabsm/replaced/`. `--yes` fixes everything. With no terminal and no `--yes`, it refuses.
 - `--fix` fixes only what DCABSM owns. The one exception is the three TurnKey pieces in spec 10.7, which it disables again after asking if they come back.
+- When `--fix` writes an Instance's `vhost.conf`, it saves the old copy first, runs `nginx -t`, and reloads Nginx only if it passes. If `nginx -t` fails, the previous file is put back, Nginx is not reloaded and the fix reports the error.
+- `--fix` repoints a Release's `node` link to `node/<major>` when it is missing or wrong, and recreates a missing Instance account (`dcabsm-<name>`) before repairing the ownership and modes of its files. A missing account is a failure.
+- Instance checks in short: `config.json` and `vhost.conf` against the record, settings the Release doesn't use (a note), account and ownership, ports, `/info`, recent scheduled Backups, and room for the next Nightly run. Severities and details are in spec 10.6.
+- Doctor warns when an Instance's unit is active but `/info` doesn't answer on its port, or reports a version other than the Instance's Release.
+- An Instance with an unfinished Release change (`.changing-release`) isn't judged on `config.json` or `vhost.conf`, since rollback rewrites them. Doctor reports the change instead.
+- An Instance with no `release` link fails the check: its `config.json` cannot be checked. Restore it from a Backup.
+- "Restart needed" is reported when a running Instance's `config.json` is newer than the unit's start. If systemd gives no start time, or the free space on the backup filesystem can't be read, doctor warns "couldn't measure" instead of staying quiet.
+- A missing `cert.pem` or `key.pem` is a warning that points to `cert update`. `--fix` doesn't recreate certificates.
+- The port check can miss a conflict: a running unit with no main process id is left alone, and if `ss` can't run, only the two-records-on-one-port check is done.
 - When `--fix` regenerates an Instance's `config.json`, it asks separately whether to restart that Instance. Otherwise it reports "restart needed".
 - Some problems are a Manual System Admin task, such as opening the firewall. Doctor says so and never changes firewall rules.
 - On TurnKey, the OS line names the appliance, for example "TurnKey Node.js 19.0 (Debian 13), amd64, VM". Doctor warns for each disabled piece that is back, and notes `webmin-nginx` if installed.

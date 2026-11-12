@@ -87,6 +87,33 @@ export async function unitStateOf(ctx: Context, name: string): Promise<InstanceS
   return UNIT_STATES.includes(state) ? (state as InstanceState) : "unknown";
 }
 
+/** When the Instance's unit last became active, or undefined if it is not running or systemd won't say. */
+export async function startedAt(ctx: Context, name: string): Promise<Date | undefined> {
+  const res = await ctx.runner.run("systemctl", [
+    "show",
+    "--timestamp=utc",
+    "-p",
+    "ActiveEnterTimestamp",
+    "--value",
+    unitName(name),
+  ]);
+  const m = /(\d{4}-\d\d-\d\d) (\d\d:\d\d:\d\d)/.exec(res.stdout);
+  return m ? new Date(`${m[1]}T${m[2]}Z`) : undefined;
+}
+
+/** The unit's main process id, or undefined when it has none. */
+export async function mainPid(ctx: Context, name: string): Promise<number | undefined> {
+  const res = await ctx.runner.run("systemctl", [
+    "show",
+    "-p",
+    "MainPID",
+    "--value",
+    unitName(name),
+  ]);
+  const pid = Number(res.stdout.trim());
+  return Number.isInteger(pid) && pid > 0 ? pid : undefined;
+}
+
 async function releaseOf(ctx: Context, name: string): Promise<string> {
   try {
     return basename(await readlink(join(instanceDir(ctx, name), "release")));

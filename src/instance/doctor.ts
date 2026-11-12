@@ -14,6 +14,7 @@ import { confirm } from "../prompt.ts";
 import { createAccount, makeDirectories } from "./create.ts";
 import {
   configJson,
+  configPath,
   instanceDirSpecs,
   instanceFileSpecs,
   vhostConf,
@@ -21,15 +22,16 @@ import {
   writeConfigJson,
   type PathSpec,
 } from "./files.ts";
-import { scheduleOf, unitStateOf } from "./list.ts";
+import { mainPid, scheduleOf, startedAt, unitStateOf } from "./list.ts";
 import { unusedSettings } from "./setting-table.ts";
 import {
   accountOf,
+  instanceDir,
   instanceNames,
   isChanging,
+  logicalDir,
   readRecord,
   runningRelease,
-  unitName,
   type InstanceRecord,
 } from "./record.ts";
 import { getJson, startVerified } from "./verify.ts";
@@ -61,34 +63,26 @@ async function targets(ctx: Context): Promise<Target[]> {
   return found;
 }
 
-/** Runs `check` for every Instance; one pass line when none has a problem. */
-async function perInstance(
-  ctx: Context,
-  label: string,
-  check: (ctx: Context, target: Target) => Promise<CheckResult[]>,
-): Promise<CheckResult[]> {
-  const problems: CheckResult[] = [];
-  for (const target of await targets(ctx)) problems.push(...(await check(ctx, target)));
-  return problems.length > 0 ? problems : [{ kind: "pass", label }];
-}
+/** One check over all the Instances a run found; the records are read once and shared. */
+type InstancesCheck = (ctx: Context, all: Target[]) => Promise<CheckResult[]>;
 
-const logical = (ctx: Context, path: string): string => path.slice(ctx.paths.root.length) || "/";
+/** Runs `check` for every Instance; one pass line when none has a problem. */
+const perInstance =
+  (
+    label: string,
+    check: (ctx: Context, target: Target) => Promise<CheckResult[]>,
+  ): InstancesCheck =>
+  async (ctx, all) => {
+    const problems: CheckResult[] = [];
+    for (const target of all) problems.push(...(await check(ctx, target)));
+    return problems.length > 0 ? problems : [{ kind: "pass", label }];
+  };
+
+/** A path inside an Instance directory, as the Host sees it (no test root). */
+const logical = (ctx: Context, name: string, path: string): string =>
+  logicalDir(name) + path.slice(instanceDir(ctx, name).length);
 
 // config.json -------------------------------------------------------------------------------------
-
-/** When the Instance's unit last became active, or undefined if it is not running or systemd won't say. */
-async function startedAt(ctx: Context, name: string): Promise<Date | undefined> {
-  const res = await ctx.runner.run("systemctl", [
-    "show",
-    "--timestamp=utc",
-    "-p",
-    "ActiveEnterTimestamp",
-    "--value",
-    unitName(name),
-  ]);
-  const m = /(\d{4}-\d\d-\d\d) (\d\d:\d\d:\d\d)/.exec(res.stdout);
-  return m ? new Date(`${m[1]}T${m[2]}Z`) : undefined;
-}
 
 const running = async (ctx: Context, name: string): Promise<boolean> =>
   RUNNING_STATES.includes(await unitStateOf(ctx, name));
@@ -118,7 +112,7 @@ async function configCheck(ctx: Context, target: Target): Promise<CheckResult[]>
       },
     ];
   }
-  const path = join(ctx.paths.instances, name, "config", "config.json");
+  const path = configPath(ctx, name);
   const wanted = configJson(name, record, release);
   const found = await readTextOr(path);
   if (found !== wanted) {
@@ -138,8 +132,19 @@ async function configCheck(ctx: Context, target: Target): Promise<CheckResult[]>
     ];
   }
   // It matches now, but a running Instance only reads it at start.
-  const started = (await running(ctx, name)) ? await startedAt(ctx, name) : undefined;
-  if (started && (await stat(path)).mtime > started) {
+  if ((await unitStateOf(ctx, name)) !== "active") return [];
+  const started = await startedAt(ctx, name);
+  if (started === undefined) {
+    return [
+      {
+        kind: "problem",
+        severity: "warn",
+        message: `${name}: couldn't measure when its unit started, so a needed restart can't be ruled out`,
+        hint: `Restart it to be sure: sudo dcabsm instance restart ${name}`,
+      },
+    ];
+  }
+  if ((await stat(path)).mtime > started) {
     return [
       {
         kind: "problem",
@@ -158,7 +163,7 @@ async function configCheck(ctx: Context, target: Target): Promise<CheckResult[]>
 async function fixVhost(ctx: Context, name: string, wanted: string, old?: string): Promise<void> {
   const path = vhostPath(ctx, name);
   if (old !== undefined) {
-    const saved = join(ctx.paths.etc, "replaced", timeStamp(ctx.now()), logical(ctx, path));
+    const saved = join(ctx.paths.etc, "replaced", timeStamp(ctx.now()), logical(ctx, name, path));
     await mkdir(dirname(saved), { recursive: true, mode: 0o700 });
     await writeFile(saved, old, { mode: 0o600 });
   }
@@ -220,8 +225,8 @@ interface Account {
   gid: number;
 }
 
-/** The Instance account from `/etc/passwd`, or undefined when it does not exist. */
-async function accountOfInstance(ctx: Context, name: string): Promise<Account | undefined> {
+/** The ids of the Instance's account (`dcabsm-<name>`) in `/etc/passwd`, or undefined when it does not exist. */
+async function passwdEntryOf(ctx: Context, name: string): Promise<Account | undefined> {
   const passwd = await readTextOr(ctx.paths.under("/etc/passwd"));
   const wanted = accountOf(name);
   for (const line of (passwd ?? "").split("\n")) {
@@ -259,7 +264,7 @@ async function repairTree(ctx: Context, name: string): Promise<void> {
 }
 
 async function ownershipCheck(ctx: Context, { name }: Target): Promise<CheckResult[]> {
-  const account = await accountOfInstance(ctx, name);
+  const account = await passwdEntryOf(ctx, name);
   if (!account) {
     return [
       {
@@ -287,8 +292,16 @@ async function ownershipCheck(ctx: Context, { name }: Target): Promise<CheckResu
         problems.push({
           kind: "problem",
           severity: "warn",
-          message: `${name}: ${logical(ctx, spec.path)} is missing`,
+          message: `${name}: ${logical(ctx, name, spec.path)} is missing`,
           fix: { apply: () => repairPath(ctx, spec, true) },
+        });
+      } else if (/\/(cert|key)\.pem$/.test(spec.path)) {
+        // No fix: DCABSM cannot recreate a certificate it does not hold.
+        problems.push({
+          kind: "problem",
+          severity: "warn",
+          message: `${name}: ${logical(ctx, name, spec.path)} is missing`,
+          hint: `Provide a certificate: sudo dcabsm cert update ${name}`,
         });
       }
       continue;
@@ -303,7 +316,7 @@ async function ownershipCheck(ctx: Context, { name }: Target): Promise<CheckResu
     problems.push({
       kind: "problem",
       severity: "warn",
-      message: `${name}: ${logical(ctx, spec.path)} ${found.join(" and ")}`,
+      message: `${name}: ${logical(ctx, name, spec.path)} ${found.join(" and ")}`,
       fix: { apply: () => repairPath(ctx, spec, isDir) },
     });
   }
@@ -312,20 +325,7 @@ async function ownershipCheck(ctx: Context, { name }: Target): Promise<CheckResu
 
 // Ports and /info ---------------------------------------------------------------------------------
 
-async function mainPid(ctx: Context, name: string): Promise<number | undefined> {
-  const res = await ctx.runner.run("systemctl", [
-    "show",
-    "-p",
-    "MainPID",
-    "--value",
-    unitName(name),
-  ]);
-  const pid = Number(res.stdout.trim());
-  return Number.isInteger(pid) && pid > 0 ? pid : undefined;
-}
-
-async function portChecks(ctx: Context): Promise<CheckResult[]> {
-  const all = await targets(ctx);
+async function portChecks(ctx: Context, all: Target[]): Promise<CheckResult[]> {
   const problems: CheckResult[] = [];
   const byPort = new Map<number, string[]>();
   for (const { name, record } of all)
@@ -408,17 +408,28 @@ async function scheduleCheck(ctx: Context, { name, record }: Target): Promise<Ch
 }
 
 /** Spec 8.4: the next Nightly run needs about as much room as the newest Backup of each Instance with scheduled Backups on. */
-async function nightlyRoom(ctx: Context): Promise<CheckResult[]> {
+async function nightlyRoom(ctx: Context, all: Target[]): Promise<CheckResult[]> {
   let need = 0;
-  for (const { name, record } of await targets(ctx)) {
+  let scheduled = 0;
+  for (const { name, record } of all) {
     if (!record.scheduledBackups) continue;
+    scheduled++;
     need += (await listArchives(ctx, name)).at(-1)?.size ?? 0;
   }
+  if (scheduled === 0) return []; // No Nightly Backups, so nothing needs room.
   let free: number;
   try {
     free = await freeBytes(ctx, await backupRoot(ctx));
   } catch {
-    return []; // No backup directory to measure yet.
+    return [
+      {
+        kind: "problem",
+        severity: "warn",
+        message:
+          "Couldn't measure the free space on the backup filesystem, so room for the next Nightly run is unknown",
+        hint: "Check that the backup directory exists and `df` can read it.",
+      },
+    ];
   }
   if (free >= need) {
     return [{ kind: "pass", label: `Room for the next Nightly run (${formatSize(free)} free)` }];
@@ -433,20 +444,26 @@ async function nightlyRoom(ctx: Context): Promise<CheckResult[]> {
   ];
 }
 
-const each = (
-  id: string,
-  label: string,
-  check: (ctx: Context, target: Target) => Promise<CheckResult[]>,
-): Check => ({ id, run: (ctx) => perInstance(ctx, label, check) });
+/** Every Instance check of spec 10.6, after the Host ones. They run as one check so the records are read once. */
+const instanceCheckList: InstancesCheck[] = [
+  perInstance("Every Instance's config.json matches its record", configCheck),
+  perInstance("Every Instance's vhost.conf matches", vhostCheck),
+  perInstance("Every Instance setting is used by its Release", settingsCheck),
+  perInstance("Instance accounts, ownership and modes", ownershipCheck),
+  portChecks,
+  perInstance("Every running Instance reports its Release on /info", infoCheck),
+  perInstance("Scheduled Backups are recent", scheduleCheck),
+  nightlyRoom,
+];
 
-/** Every Instance check of spec 10.6, after the Host ones. */
 export const instanceChecks: Check[] = [
-  each("instance-config", "Every Instance's config.json matches its record", configCheck),
-  each("instance-vhost", "Every Instance's vhost.conf matches", vhostCheck),
-  each("instance-settings", "Every Instance setting is used by its Release", settingsCheck),
-  each("instance-ownership", "Instance accounts, ownership and modes", ownershipCheck),
-  { id: "instance-ports", run: portChecks },
-  each("instance-info", "Every running Instance reports its Release on /info", infoCheck),
-  each("instance-schedule", "Scheduled Backups are recent", scheduleCheck),
-  { id: "instance-nightly-room", run: nightlyRoom },
+  {
+    id: "instances",
+    async run(ctx) {
+      const all = await targets(ctx);
+      const results: CheckResult[] = [];
+      for (const check of instanceCheckList) results.push(...(await check(ctx, all)));
+      return results;
+    },
+  },
 ];

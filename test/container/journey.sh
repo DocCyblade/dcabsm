@@ -123,6 +123,24 @@ expect_in "301"
 run info alpha.test
 expect_in "version"
 
+step "Doctor finds a healthy Instance in order"
+# The Unsupported Host mark keeps the exit code non-zero, so only the Instance rows are checked.
+run dcabsm host doctor
+expect_in "✓ Every Instance's config.json matches its record"
+expect_in "✓ Every Instance's vhost.conf matches"
+expect_in "✓ Instance accounts, ownership and modes"
+expect_in "✓ Every Instance's port is its own"
+case "$out" in *"✗ alpha"* | *"! alpha"*) fail "doctor reported a problem with a healthy alpha" ;; esac
+
+step "Doctor --fix repairs a vhost.conf edited by hand"
+echo "# edited by hand" >> /srv/dcabsm/instances/alpha/nginx/vhost.conf
+run dcabsm host doctor
+expect_in "alpha: vhost.conf differs"
+run dcabsm host doctor --fix --yes
+grep -q "edited by hand" /srv/dcabsm/instances/alpha/nginx/vhost.conf && fail "doctor --fix did not repair vhost.conf"
+nginx -t || fail "nginx -t fails after doctor --fix"
+up alpha.test || fail "alpha is not served after doctor --fix"
+
 if [ "$mode" = live ]; then
   step "The newest Release is the one installed"
   expect_ok dcabsm release list

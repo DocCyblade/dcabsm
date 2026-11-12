@@ -13,6 +13,10 @@ export interface PathSpec {
   owner: string;
 }
 
+/** The path of an Instance's `config.json`. */
+export const configPath = (ctx: Context, name: string): string =>
+  join(instanceDir(ctx, name), "config", "config.json");
+
 /** The Instance's directories, before the first start (spec 2.2). */
 export function instanceDirSpecs(ctx: Context, name: string): PathSpec[] {
   const dir = instanceDir(ctx, name);
@@ -33,7 +37,7 @@ export function instanceDirSpecs(ctx: Context, name: string): PathSpec[] {
 export function instanceFileSpecs(ctx: Context, name: string): PathSpec[] {
   const dir = instanceDir(ctx, name);
   return [
-    { path: join(dir, "config", "config.json"), mode: 0o640, owner: `root:${accountOf(name)}` },
+    { path: configPath(ctx, name), mode: 0o640, owner: `root:${accountOf(name)}` },
     { path: recordPath(ctx, name), mode: 0o600, owner: "root:root" },
     ...["vhost.conf", "cert.pem", "key.pem"].map((file) => ({
       path: join(dir, "nginx", file),
@@ -79,7 +83,7 @@ export async function writeConfigJson(
   record: InstanceRecord,
   release: string,
 ): Promise<void> {
-  const path = join(instanceDir(ctx, name), "config", "config.json");
+  const path = configPath(ctx, name);
   await writeFileAtomic(path, configJson(name, record, release), 0o640);
   const res = await ctx.runner.run("chown", [`root:${accountOf(name)}`, path]);
   if (res.code !== 0) {
