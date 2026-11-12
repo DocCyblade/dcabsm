@@ -334,8 +334,9 @@ export function fakeNet(overrides: Partial<FakeNet> = {}): FakeNet {
         writeFileSync(join(prefix, "package-lock.json"), "{}");
         return ok();
       }
-      if (command.endsWith("/bin/node") && args[0] === "-e") {
-        return net.nativeFails || net.brokenDirs.some((d) => args[2]!.startsWith(d))
+      if (command === "setpriv" && args[4] === "-e") {
+        // setpriv --reuid=… --regid=… --clear-groups <node> -e <code> <package.json>
+        return net.nativeFails || net.brokenDirs.some((d) => args[6]!.startsWith(d))
           ? { code: 1, stdout: "", stderr: "Error: Cannot find module 'better-sqlite3'" }
           : ok();
       }
