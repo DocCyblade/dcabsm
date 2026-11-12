@@ -94,6 +94,7 @@ describe("instance create --self-signed", () => {
       port: 15127,
       hostname: "shop.example.org",
       scheduledBackups: true,
+      createdAt: "2026-11-09T12:00:00.000Z",
     });
     expect(JSON.parse(await read(join(d, "config/config.json")))).toEqual({
       dataDir: "/srv/dcabsm/instances/shop/data",
@@ -595,6 +596,15 @@ describe("failures", () => {
 });
 
 describe("instance list and show", () => {
+  // Backdates the record's creation time, as for Instances made last week.
+  const ageAll = async () => {
+    for (const n of ["shop", "two"]) {
+      const path = join(dir(n), "config/instance.json");
+      const rec = JSON.parse(await read(path).catch(() => "null"));
+      if (rec) await writeFile(path, JSON.stringify({ ...rec, createdAt: "2026-11-01T00:00:00Z" }));
+    }
+  };
+
   it("points to create when there are no Instances", async () => {
     await start();
     expect(await run(["instance", "list"], h.ctx)).toBe(0);
@@ -605,6 +615,7 @@ describe("instance list and show", () => {
     await start();
     await shop();
     await create("two", "--hostname", "two.example.org", "--self-signed");
+    await ageAll();
     // Stop `two` from now on.
     const inner = h.ctx.runner;
     h.ctx.runner = {
@@ -628,6 +639,15 @@ describe("instance list and show", () => {
   });
 
   describe("48-hour warning", () => {
+    it("is quiet for an Instance younger than 48 hours with no scheduled Backup", async () => {
+      await start();
+      await shop();
+      h.out.length = 0;
+      await run(["instance", "list"], h.ctx);
+      expect(h.out[1]).toMatch(/none$/);
+      expect(h.out.filter((l) => l.startsWith("  ! "))).toEqual([]);
+    });
+
     const archive = async (name: string, stamp: string, kind = "scheduled") => {
       const d = join(h.ctx.paths.under("/srv/dcabsm/backups"), name);
       await mkdir(d, { recursive: true });
@@ -647,6 +667,7 @@ describe("instance list and show", () => {
     it("warns for an older scheduled Backup, ignoring other kinds", async () => {
       await start();
       await shop();
+      await ageAll();
       await archive("shop", "20261107T110000Z");
       await archive("shop", "20261109T110000Z", "manual");
       h.out.length = 0;

@@ -130,8 +130,8 @@ expect_in "✓ Every Instance's config.json matches its record"
 expect_in "✓ Every Instance's vhost.conf matches"
 expect_in "✓ Instance accounts, ownership and modes"
 expect_in "✓ Every Instance's port is its own"
-# A brand-new Instance has no scheduled Backup yet, so that one warning is expected here.
-case "$out" in *"✗ alpha"* | *"! alpha: restart"* | *"! alpha: config"* | *"! alpha: vhost"*) fail "doctor reported a problem with a healthy alpha" ;; esac
+# A brand-new Instance is younger than 48 hours, so it gets no late-Backup warning either.
+case "$out" in *"✗ alpha"* | *"! alpha"*) fail "doctor reported a problem with a healthy alpha" ;; esac
 
 step "Doctor --fix repairs a vhost.conf edited by hand"
 echo "# journey tamper" >> /srv/dcabsm/instances/alpha/nginx/vhost.conf

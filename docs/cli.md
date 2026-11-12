@@ -368,7 +368,7 @@ test      failed   Not enough space in /srv/dcabsm/backups for a backup of test 
   ✗ 1 backed up, 1 skipped (no data or schedule off), 1 failed
 ```
 
-Read the summary with `journalctl -u dcabsm-nightly` (add `-b` for this boot or `--since yesterday`). Look for the `Summary` block and the `✗` lines; the result is also one `dcabsm: host nightly: ok` or `failed` line under `journalctl -t dcabsm`. A failing schedule also shows in `instance list`, which warns when an Instance with scheduled Backups on has no `scheduled` archive newer than 48 hours.
+Read the summary with `journalctl -u dcabsm-nightly` (add `-b` for this boot or `--since yesterday`). Look for the `Summary` block and the `✗` lines; the result is also one `dcabsm: host nightly: ok` or `failed` line under `journalctl -t dcabsm`. A failing schedule also shows in `instance list`, which warns when an Instance with scheduled Backups on has no `scheduled` archive newer than 48 hours. An Instance created less than 48 hours ago is not flagged.
 
 ## instance
 
@@ -390,7 +390,7 @@ DCABSM 1.2.0 · Nightly run 03:30 · last check 2026-11-07 12:00 UTC
 ```
 
 - An Instance with an unfinished Release change shows `CHANGING` as its state. `start` and `restart` refuse it and point to `instance rollback`; `stop` still works. Below the table a warning names the operation, its Releases and the `instance rollback` command.
-- LAST SCHEDULED shows `off` when scheduled Backups are off, and `none` when there are none. It warns when an Instance with scheduled Backups on has none newer than 48 hours.
+- LAST SCHEDULED shows `off` when scheduled Backups are off, and `none` when there are none. It warns when an Instance with scheduled Backups on has none newer than 48 hours, unless the Instance is itself younger than 48 hours.
 - The Unsupported Host mark is always shown.
 - With no Instances, it points to `instance create`.
 

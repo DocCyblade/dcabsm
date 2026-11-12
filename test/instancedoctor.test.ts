@@ -366,6 +366,14 @@ describe("Backups", () => {
       mode: 0o600,
     });
   };
+  // The record says when the Instance was created; rewrite it to put that in the past.
+  const createdAt = async (iso: string | undefined) => {
+    const path = dir("config", "instance.json");
+    const rec = JSON.parse(await read(path));
+    if (iso === undefined) delete rec.createdAt;
+    else rec.createdAt = iso;
+    await writeFile(path, JSON.stringify(rec));
+  };
   const scheduledOn = async () => {
     expect(await run(["backup", "schedule", "family", "on"], h.ctx)).toBe(0);
   };
@@ -373,6 +381,7 @@ describe("Backups", () => {
   it("warns when scheduled Backups are on and none is newer than 48 hours", async () => {
     await familyHost();
     await scheduledOn();
+    await createdAt("2026-11-01T00:00:00Z");
     await archive("20261105T033000Z");
     expect(await doctor()).toBe(1);
     expect(text()).toContain("! family: no scheduled Backup in the last 48 hours");
@@ -381,6 +390,30 @@ describe("Backups", () => {
   it("warns when there is no scheduled Backup at all", async () => {
     await familyHost();
     await scheduledOn();
+    await createdAt("2026-11-01T00:00:00Z");
+    expect(await doctor()).toBe(1);
+    expect(text()).toContain("! family: no scheduled Backup in the last 48 hours");
+  });
+
+  it("does not warn for an Instance younger than 48 hours that has no scheduled Backup yet", async () => {
+    await familyHost();
+    await scheduledOn();
+    expect(await doctor()).toBe(0);
+    expect(text()).not.toContain("no scheduled Backup");
+  });
+
+  it("warns once the Instance is older than 48 hours", async () => {
+    await familyHost();
+    await scheduledOn();
+    await createdAt("2026-11-07T11:00:00Z"); // 49 hours before the faked clock
+    expect(await doctor()).toBe(1);
+    expect(text()).toContain("! family: no scheduled Backup in the last 48 hours");
+  });
+
+  it("keeps warning for an older Instance whose record has no creation time", async () => {
+    await familyHost();
+    await scheduledOn();
+    await createdAt(undefined);
     expect(await doctor()).toBe(1);
     expect(text()).toContain("! family: no scheduled Backup in the last 48 hours");
   });
