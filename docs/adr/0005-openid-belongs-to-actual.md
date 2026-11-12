@@ -1,5 +1,7 @@
 # OpenID belongs to Actual, not DCABSM
 
+Status: Accepted
+
 DCABSM never writes `openId.*` into an Instance's `config.json`, and the System Admin sets up OpenID in Actual's own web UI. Actual stores OpenID, client secret included, in `server-files/account.sqlite`, and login reads it from there. When config sets OpenID, Actual writes it over that row on every start, but removing it from config leaves the row, so config and the database would both claim to be in charge. Leaving OpenID to Actual means one place is in charge, and DCABSM never holds the client secret. This was read from the 26.10.0 and 26.11.0 source on 2026-11-09.
 
 ## Considered options

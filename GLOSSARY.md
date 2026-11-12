@@ -96,8 +96,12 @@ _Avoid_: Sync reset (that is Actual's own action from a device)
 A new Instance made from a Backup of another, with its own name, account, port, hostname and certificate. Everything inside Actual, including logins, is copied.
 _Avoid_: Copy, duplicate (Actual's duplicate is one Budget file)
 
-**Pre-upgrade backup**:
-The backup taken while an Instance is stopped for an Upgrade. It records the Release the Instance was leaving.
+**Verification**:
+The check after a Release change, rollback or restore (spec 6.2): within 120 seconds the unit is active, `/health` answers UP and `/info` reports the target version. A unit that restarted during the window counts as failed. A failed Verification after an Upgrade triggers the automatic return to the Pre-upgrade Backup.
+_Avoid_: Health check, smoke test
+
+**Pre-upgrade Backup**:
+The Backup taken while an Instance is stopped for an Upgrade. It records the Release the Instance was leaving.
 _Avoid_: Snapshot
 
 **Nightly run**:

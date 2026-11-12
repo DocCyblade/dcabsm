@@ -1,5 +1,7 @@
 # DCABSM ships as a signed tarball with its own Node
 
+Status: Accepted
+
 DCABSM is distributed as one tarball per architecture from GitHub Releases, holding its bundled JS and a pinned official Node, installed to `/opt/dcabsm/<ver>/`. The tarballs are listed in `SHA256SUMS`, which the author signs with OpenPGP on their own machine, and DCABSM checks updates only against the key it already has. We chose this because setup must run before any managed Node runtime exists, DCABSM runs as root, and the `gpgv` check it needs for Node downloads can check its own downloads too.
 
 ## Considered options

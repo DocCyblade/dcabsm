@@ -199,9 +199,21 @@ describe("the npm install", () => {
   it("checks all three native modules", async () => {
     await start();
     await install("26.11.0");
-    const check = h.calls.find((c) => c.args[0] === "-e")!;
-    for (const m of ["bcrypt", "argon2", "better-sqlite3"]) expect(check.args[1]).toContain(m);
-    expect(check.command).toBe(join(h.ctx.paths.node, "24.11.1", "bin", "node"));
+    const check = h.calls.find((c) => c.command === "setpriv")!;
+    const at = check.args.indexOf("-e");
+    for (const m of ["bcrypt", "argon2", "better-sqlite3"]) expect(check.args[at + 1]).toContain(m);
+    expect(check.args[at - 1]).toBe(join(h.ctx.paths.node, "24.11.1", "bin", "node"));
+  });
+
+  it("runs the native module check as an unprivileged user, never as root", async () => {
+    await start();
+    await install("26.11.0");
+    const check = h.calls.find((c) => c.command === "setpriv")!;
+    expect(check.args).toEqual(
+      expect.arrayContaining(["--reuid=65534", "--regid=65534", "--clear-groups"]),
+    );
+    // Nothing else runs the Release's Node with -e.
+    expect(h.calls.filter((c) => c.args.includes("-e") && c.command !== "setpriv")).toEqual([]);
   });
 
   it("clears a leftover .installing directory from a crashed run", async () => {

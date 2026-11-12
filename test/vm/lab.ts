@@ -55,7 +55,7 @@ export interface LabVm {
   token: string;
 }
 
-const list = (value: string | undefined): string[] =>
+const words = (value: string | undefined): string[] =>
   (value ?? "")
     .replace(/[()"']/g, " ")
     .split(/[\s,]+/)
@@ -63,7 +63,7 @@ const list = (value: string | undefined): string[] =>
 
 /** Every VM named in `VMS`, with what the registry holds for it. Incomplete VMs are still returned. */
 export function loadVms(env: Record<string, string>): LabVm[] {
-  return list(env.VMS).map((name) => {
+  return words(env.VMS).map((name) => {
     const get = (key: string): string => env[`TVM_${name}_${key}`] ?? "";
     const pve = get("PVE");
     const viaPve = (key: string): string => env[`PVE_${pve}_${key}`] ?? "";
@@ -81,19 +81,29 @@ export function loadVms(env: Record<string, string>): LabVm[] {
       vmid: get("VMID"),
       sshHost: get("SSH_HOST"),
       sshUser: get("SSH_USER"),
-      snapshots: list(get("SNAPSHOT")),
+      snapshots: words(get("SNAPSHOT")),
       url: viaPve("URL").replace(/\/+$/, ""),
       token: full || (id && secret ? `${id}=${secret}` : ""),
     };
   });
 }
 
-const squash = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+const flatten = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+/** How the Ubuntu LTS releases are also written in PURPOSE and NOTES, such as "Ubuntu LTS 24". */
+const LTS_WORDING: Partial<Record<JourneyOs, RegExp>> = {
+  "ubuntu-24.04": /\blts\s*24\b/i,
+  "ubuntu-26.04": /\blts\s*26\b/i,
+};
 
 function mentions(text: string, os: JourneyOs): boolean {
-  const flat = squash(text);
-  return os === "turnkey" ? flat.includes("turnkey") : flat.includes(squash(os));
+  const flat = flatten(text);
+  if (os === "turnkey") return flat.includes("turnkey");
+  return flat.includes(flatten(os)) || (LTS_WORDING[os]?.test(text) ?? false);
 }
+
+/** The `OS` key names the OS outright, so it must be the OS and not merely contain it (`ubuntu-24.04-ci`). */
+const isOsKey = (value: string, os: JourneyOs): boolean => flatten(value) === flatten(os);
 
 /**
  * The VM for an OS, or undefined. An `OS` key (`TVM_<NAME>_OS`) decides first; then PURPOSE and
@@ -104,13 +114,13 @@ export function selectVm(vms: LabVm[], os: JourneyOs, pick?: string): LabVm | un
   const isTurnkey = (vm: LabVm): boolean =>
     mentions(`${vm.os} ${vm.purpose} ${vm.features}`, "turnkey");
   const eligible = vms.filter((vm) => (os === "turnkey" ? true : !isTurnkey(vm)));
-  const fields: Array<(vm: LabVm) => string> = [
-    (vm) => vm.os,
-    (vm) => `${vm.purpose} ${vm.features}`,
-    (vm) => vm.notes,
+  const matchers: Array<(vm: LabVm) => boolean> = [
+    (vm) => isOsKey(vm.os, os),
+    (vm) => mentions(`${vm.purpose} ${vm.features}`, os),
+    (vm) => mentions(vm.notes, os),
   ];
-  for (const field of fields) {
-    const found = eligible.filter((vm) => mentions(field(vm), os));
+  for (const matches of matchers) {
+    const found = eligible.filter(matches);
     if (pick) {
       const named = found.find((vm) => vm.name === pick);
       if (named) return named;
@@ -126,9 +136,8 @@ export function snapshotsFor(vm: LabVm, os: JourneyOs): string[] {
   if (os === "turnkey") {
     const named = vm.snapshots.filter((s) => (TURNKEY_SNAPSHOTS as readonly string[]).includes(s));
     if (named.length > 0) return named;
-    // A TurnKey VM registered with a single snapshot (one VM per flavour) runs from that one.
-    return [vm.snapshots[0] ?? "clean"];
   }
+  // Any other VM, and a TurnKey VM registered with a single snapshot (one VM per flavour), runs from its first.
   return [vm.snapshots[0] ?? "clean"];
 }
 
@@ -193,11 +202,11 @@ export interface JourneyOptions {
 
 export function planSteps(opts: JourneyOptions): StepId[] {
   const tk = opts.os === "turnkey";
-  const only = <T extends StepId>(...ids: T[]): T[] => (tk ? ids : []);
+  const turnkeyOnly = <T extends StepId>(...ids: T[]): T[] => (tk ? ids : []);
   if (opts.selfUpdate)
     return [
       "install-prev",
-      ...only("tk-setup-prompt" as const),
+      ...turnkeyOnly("tk-setup-prompt" as const),
       "setup",
       "create-alpha",
       "self-update",
@@ -206,12 +215,12 @@ export function planSteps(opts: JourneyOptions): StepId[] {
     ];
   return [
     "install",
-    ...only("tk-setup-prompt" as const),
+    ...turnkeyOnly("tk-setup-prompt" as const),
     "setup",
-    ...only("tk-pieces" as const),
+    ...turnkeyOnly("tk-pieces" as const),
     "create-alpha",
     "create-beta",
-    ...only("tk-vhost" as const),
+    ...turnkeyOnly("tk-vhost" as const),
     "upgrade",
     "rollback",
     "backup",
@@ -219,7 +228,7 @@ export function planSteps(opts: JourneyOptions): StepId[] {
     "clone",
     "reboot",
     "doctor",
-    ...only("tk-doctor" as const),
+    ...turnkeyOnly("tk-doctor" as const),
   ];
 }
 

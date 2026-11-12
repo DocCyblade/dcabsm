@@ -26,6 +26,7 @@ import {
   ARCHIVE_FORMAT,
   archiveName,
   backupRoot,
+  freeBytes,
   logicalBackupRoot,
   type Kind,
   type Manifest,
@@ -43,19 +44,6 @@ export async function hasData(dir: string): Promise<boolean> {
     }
   }
   return false;
-}
-
-/** Free bytes where `path` lives, from `df -Pk`. */
-export async function freeBytes(ctx: Context, path: string): Promise<number> {
-  const res = await ctx.runner.run("df", ["-Pk", path]);
-  const kb = Number(res.stdout.split("\n")[1]?.trim().split(/\s+/)[3]);
-  if (res.code !== 0 || !Number.isFinite(kb)) {
-    throw new CliError(
-      `Could not read the free space in ${path}.`,
-      "Check the disk, then run again",
-    );
-  }
-  return kb * 1024;
 }
 
 /**

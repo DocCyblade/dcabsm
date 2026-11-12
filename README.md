@@ -51,7 +51,7 @@ DCABSM is designed for a **fresh, dedicated Host**. Installing it on a server th
 | TurnKey Node.js 19.x (Debian 13) | amd64 | from the ISO |
 
 - **Tested on** amd64 virtual machines running each OS in the table.
-- **arm64** is built and tested in CI, but hasn't been tested on a real Host yet.
+- **arm64** is built, and its unit tests run in CI, but it has not been run on a real Host yet.
 - **Virtual machines and bare metal only.** Setup refuses containers (LXC, WSL, Docker, Podman) and the Proxmox VE host itself.
 - **Nginx** must be the distro's own `nginx` package. Setup installs it if it's missing. nginx.org's package isn't supported.
 - **Actual** Releases 26.10.0 and newer, stable versions from npm only.

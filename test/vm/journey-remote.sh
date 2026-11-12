@@ -68,7 +68,7 @@ case "$step_id" in
     else
       # Nothing is signed in CI, so unpack the tarball where install.sh would put it.
       mkdir -p /opt/dcabsm/.stage /usr/local/bin /usr/share/bash-completion/completions
-      tar -xzf "$stage/dcabsm-$version-linux-$arch.tar.gz" -C /opt/dcabsm/.stage --strip-components=1
+      tar --no-same-owner -xzf "$stage/dcabsm-$version-linux-$arch.tar.gz" -C /opt/dcabsm/.stage --strip-components=1
       mv /opt/dcabsm/.stage "/opt/dcabsm/$version"
       ln -sfn "/opt/dcabsm/$version/bin/dcabsm" /usr/local/bin/dcabsm
     fi

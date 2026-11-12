@@ -1,3 +1,4 @@
+import { stat } from "node:fs/promises";
 import { parseCommand } from "../args.ts";
 import { inspectChain, validateCertificate } from "../cert.ts";
 import type { Context } from "../context.ts";
@@ -85,6 +86,13 @@ export async function certUpdate({ ctx, args }: Invocation): Promise<void> {
 
   const certPem = await readOrRefuse(values.cert, "certificate");
   const keyPem = values.key === undefined ? undefined : await readOrRefuse(values.key, "key");
+  if (values.key !== undefined && ((await stat(values.key)).mode & 0o077) !== 0) {
+    step(
+      ctx,
+      "warn",
+      `The key file ${values.key} is readable by other users. Make it private: chmod 600 ${values.key}`,
+    );
+  }
   const swaps = await validateAll(ctx, targets, certPem, keyPem);
 
   let reloaded = false;

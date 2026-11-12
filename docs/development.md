@@ -37,7 +37,10 @@ DCABSM is TypeScript on Node 24, bundled by esbuild into one JS file. It has no 
 - `src/paths.ts`: every path hangs off one root. `DCABSM_ROOT` moves it; the default is `/`. In the shipped completion script it is a test seam only: it lets the real-bash tests run under a temporary root.
 - `src/prompt.ts`, `src/lock.ts`, `src/log.ts`: the helpers every command shares. `lock.ts` has `acquireLock` (fails at once) and `acquireLockWaiting` (retries for up to 10 minutes; the Nightly run uses it).
 - `src/rollback.ts`: `snapshotFiles` reads the files a change can touch and `putBack` writes them back, for `cert update` and `instance set-hostname`.
+- `src/certs/doctor.ts`: the certificate checks `host doctor` runs.
 - `test/container/`: the container layer (spec 13.2, 13.3), CI only in practice; see below.
+- `test/vm/`: the VM journey (spec 13.4), driven by hand against the private Proxmox lab. `run-journey.sh` runs the steps and `journey-remote.sh` is the part that runs on the VM. `lab.ts` picks a VM from the registry by OS and plans the steps, and `lab-cli.ts` is its command line (the only code that calls Proxmox, limited to rolling back and powering on). `test-vms.env.example` documents the registry keys with fake values; the real registry stays outside the repo.
+- `scripts/remote-test.sh`: runs the checks on a remote Linux machine; `--parallel` runs `test/container/run.sh --parallel` there.
 - `test/helpers.ts`: a `Context` on a temporary root with a faked runner and fetcher. Tests assert on the files left behind.
 
 ## Container layer

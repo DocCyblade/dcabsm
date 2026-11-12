@@ -1,5 +1,7 @@
 # Every restore regroups
 
+Status: Accepted
+
 After restoring data into an Instance, DCABSM gives each Budget file a new group id in `account.sqlite` and renames its `group-<id>.sqlite` to match, keeping every message. Without this, the first device that opens the app re-sends every change made after the backup, and the restore is silently undone. With it, each device shows Actual's "Syncing has been reset on this cloud file" dialog, and **Revert** brings it exactly to the restored data. Both were tested in Chromium on 2026-11-07, in the browser test behind this decision. The server is the source of truth, so DCABSM enforces this itself rather than relying on the System Admin to remember it.
 
 ## Considered options

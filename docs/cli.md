@@ -902,7 +902,7 @@ Update certificate for family, family-test
   · Actual was not restarted.
 ```
 
-Every named Instance is checked before anything changes. An expired or not-yet-valid certificate, a hostname it doesn't cover, a key that doesn't match or a passphrase-protected key stops the command with nothing changed for any Instance. An untrusted chain only warns. If the new certificate isn't served within 5 seconds, the old files go back.
+Every named Instance is checked before anything changes. A `--key` file that other users can read only warns, and the warning suggests `chmod 600`. An expired or not-yet-valid certificate, a hostname it doesn't cover, a key that doesn't match or a passphrase-protected key stops the command with nothing changed for any Instance. An untrusted chain only warns. If the new certificate isn't served within 5 seconds, the old files go back.
 
 ## release
 

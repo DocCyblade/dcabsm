@@ -28,6 +28,9 @@ import {
 
 const shq = (s: string): string => `'${s.replace(/'/g, `'\\''`)}'`;
 
+const sshTarget = (vm: { sshUser?: string; sshHost: string }): string =>
+  vm.sshUser ? `${vm.sshUser}@${vm.sshHost}` : vm.sshHost;
+
 function fail(message: string): never {
   process.stderr.write(`${message}\n`);
   process.exit(2);
@@ -54,7 +57,7 @@ function realTransport(url: string, token: string): PveTransport {
         {
           method: req.method,
           headers: { Authorization: `PVEAPIToken=${token}`, "Content-Length": 0 },
-          // The lab's Proxmox uses its own certificate, as curl -k does in scripts/remote-test.sh.
+          // Lab only: the lab's Proxmox uses its own certificate, as curl -k does in scripts/remote-test.sh.
           rejectUnauthorized: false,
         },
         (res) => {
@@ -99,7 +102,7 @@ async function main(): Promise<void> {
       return;
     }
     const { vm } = selection;
-    const target = vm.sshUser ? `${vm.sshUser}@${vm.sshHost}` : vm.sshHost;
+    const target = sshTarget(vm);
     process.stdout.write(
       `SSH_TARGET=${shq(target)}\nSNAPSHOTS=${shq(selection.snapshots.join(" "))}\n`,
     );
@@ -115,7 +118,7 @@ async function main(): Promise<void> {
     if (!selection.vm || !snapshot) fail(selection.skipped ?? "rollback needs a snapshot");
     const { vm } = selection;
     if (!selection.snapshots.includes(snapshot)) fail("that snapshot is not one of this VM's");
-    const target = vm.sshUser ? `${vm.sshUser}@${vm.sshHost}` : vm.sshHost;
+    const target = sshTarget(vm);
     await rollbackVm(vm, snapshot, {
       pve: guardedPve(realTransport(vm.url, vm.token)),
       sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
