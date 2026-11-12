@@ -50,3 +50,33 @@ describe("an untrusted archive", () => {
     expect(t.sysctls()).not.toContain("stop dcabsm@shop");
   });
 });
+
+describe("an untrusted archive's Instance record", () => {
+  /** Rewrites config/instance.json in the (fake) archive. */
+  async function withRecord(patch: Record<string, unknown>): Promise<string> {
+    const archive = JSON.parse(await readFile(t.archive, "utf8"));
+    const record = JSON.parse(archive.files["config/instance.json"]);
+    archive.files["config/instance.json"] = JSON.stringify({ ...record, ...patch });
+    const path = `${t.archive}.record`;
+    await writeFile(path, JSON.stringify(archive));
+    return path;
+  }
+
+  const bad: Array<[string, Record<string, unknown>]> = [
+    ["a port below 1024", { port: 22 }],
+    ["a fractional port", { port: 8080.5 }],
+    ["a port beyond 65535", { port: 70000 }],
+    ["an unknown setting", { settings: { "no-such-setting": 1 } }],
+    ["a setting with the wrong value", { settings: { "upload-limit-mb": "1m; evil" } }],
+    ["a setting out of range", { settings: { "upload-limit-mb": 1e21 } }],
+  ];
+  for (const [what, patch] of bad) {
+    it(`is refused with ${what}`, async () => {
+      t = await startArchiveHost();
+      const evil = await withRecord(patch);
+      await t.loseShop();
+      expect(await run(["instance", "restore", "--from", evil], t.h.ctx)).not.toBe(0);
+      expect(t.err()).toContain("Instance record");
+    });
+  }
+});
