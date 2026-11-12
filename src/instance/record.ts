@@ -82,6 +82,7 @@ export function checkName(name: string): void {
 
 /** The Instance's record, or a refusal that points to `instance list`. */
 export async function requireInstance(ctx: Context, name: string): Promise<InstanceRecord> {
+  checkName(name);
   const record = (await exists(instanceDir(ctx, name))) ? await readRecord(ctx, name) : undefined;
   if (!record) {
     throw refusal(`There is no Instance named ${name}.`, "See the list: dcabsm instance list");
