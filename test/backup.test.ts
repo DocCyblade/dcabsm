@@ -80,6 +80,13 @@ describe("backup create", () => {
     expect((await stat(backups("shop"))).mode & 0o777).toBe(0o700);
     expect((await stat(backups())).mode & 0o777).toBe(0o700);
 
+    const order = h.calls
+      .filter(
+        (c) =>
+          (c.command === "tar" && c.args[0] !== "-xzOf") ||
+          (c.command === "systemctl" && !["is-active", "reset-failed"].includes(c.args[0]!)),
+      )
+      .map((c) => `${c.command} ${c.args[0]}`);
     // manifest.json first, and the release symlink is left out.
     expect(await tarMembers(archive)).toEqual([
       "manifest.json",
@@ -100,13 +107,6 @@ describe("backup create", () => {
       hostname: "shop.example.org",
     });
 
-    const order = h.calls
-      .filter(
-        (c) =>
-          (c.command === "tar" && c.args[0] !== "-xzOf") ||
-          (c.command === "systemctl" && !["is-active", "reset-failed"].includes(c.args[0]!)),
-      )
-      .map((c) => `${c.command} ${c.args[0]}`);
     expect(order).toEqual(["systemctl stop", "tar -czf", "tar -tzf", "systemctl start"]);
     expect(await readdir(backups("shop"))).toEqual([FILE]);
     expect(h.out).toContain(
