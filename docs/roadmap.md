@@ -43,3 +43,11 @@ V1 exposes six Actual settings (spec 4.11). Candidates for later:
 - **zsh and fish Tab completion**, only if asked for. V1 ships bash completion (spec 9.1).
 - **An uninstall command.** In V1, removing DCABSM is a Manual System Admin task described in the README (spec 11.5).
 - **Reproducible builds**, so a compromised CI run can't produce a tarball that the author then signs ([ADR-0003](adr/0003-signed-tarball-with-its-own-node.md)).
+
+## Review follow-ups
+
+Small items from the Wave 8 security review that are not V1 behaviour:
+
+- **Release gate (issue #43): check the `install.sh` fingerprint.** `install.sh` prints a fingerprint written into the script. The release process should fail the build when it differs from the fingerprint of the embedded keyring.
+- **Whole-codebase review (issue #44): look closer at `release prune`, `instance remove` and `host/updates.ts`.** The Wave 8 review checked that their runner calls pass arguments without a shell and use validated names, and did not review their logic in depth.
+- **The Instance unit keeps its current hardening.** `MemoryDenyWriteExecute` is incompatible with Node's JIT, and `IPAddressDeny` would break the proxying and sync. Revisit only if DCABSM gains an egress policy.
