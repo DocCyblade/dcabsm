@@ -16,8 +16,8 @@ import { reportUnusedSettings } from "./setting-table.ts";
 import { planIfMissing } from "./upgrade-plan.ts";
 
 /** `instance restore --from <archive>` (spec 7.7): rebuilds an Instance that does not exist here. */
-export async function restoreFrom(ctx: Context, archive: string): Promise<void> {
-  await requireArchiveFile(archive);
+export async function restoreFrom(ctx: Context, given: string): Promise<void> {
+  const archive = await requireArchiveFile(given);
   const manifest = await readManifest(ctx, archive);
   const name = manifest.name;
   checkName(name);

@@ -43,8 +43,7 @@ const USAGE =
 /** The archive to restore: the one given, or the newest in the Instance's backup directory. */
 async function pickArchive(ctx: Context, name: string, given: string | undefined) {
   if (given !== undefined) {
-    await requireArchiveFile(given);
-    return given;
+    return requireArchiveFile(given);
   }
   const newest = (await listArchives(ctx, name)).at(-1);
   if (!newest) {

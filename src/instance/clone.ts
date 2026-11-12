@@ -141,8 +141,7 @@ export async function instanceClone({ ctx, args }: Invocation): Promise<void> {
     await confirmOrCancel(ctx, "Continue?", { yes: req.yes });
     archive = await backupPath(ctx, source, await takeBackup(ctx, source, "pre-clone"));
   } else {
-    archive = req.archive!;
-    await requireArchiveFile(archive);
+    archive = await requireArchiveFile(req.archive!);
     label = basename(archive);
     ctx.io.out(`Clone from ${label} → ${name}`);
   }

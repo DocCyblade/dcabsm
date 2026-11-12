@@ -1,5 +1,5 @@
 import { readdir, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import type { Context } from "../context.ts";
 import { CliError, firstLine, refusal } from "../errors.ts";
 import { DEFAULT_BACKUP_DIR, readHostConfig } from "../host/config.ts";
@@ -47,12 +47,16 @@ export async function backupPath(ctx: Context, name: string, file: string): Prom
   return join(await backupRoot(ctx), name, file);
 }
 
-/** Refuses a path that is not a file: the check for an archive given on the command line. */
-export async function requireArchiveFile(archive: string): Promise<void> {
+/**
+ * Refuses a path that is not a file: the check for an archive given on the command line. Returns the
+ * absolute path to hand to tar, since GNU tar reads `host:file` as a file on another machine.
+ */
+export async function requireArchiveFile(archive: string): Promise<string> {
   const found = await stat(archive).catch(() => undefined);
   if (!found?.isFile()) {
     throw refusal(`${archive} is not an archive file.`, "Give the path of a .tar.gz archive.");
   }
+  return resolve(archive);
 }
 
 /** `20261107T141200Z` */

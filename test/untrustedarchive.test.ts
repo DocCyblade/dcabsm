@@ -1,4 +1,5 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { copyFile, readFile, rm, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { run } from "../src/cli.ts";
 import { startArchiveHost, type ArchiveHost } from "./archivehost.ts";
@@ -50,6 +51,24 @@ describe("an untrusted archive", () => {
     );
     expect(t.err()).toContain("unsafe");
     expect(t.sysctls()).not.toContain("stop dcabsm@shop");
+  });
+});
+
+describe("an archive path given on the command line", () => {
+  it("reaches tar as an absolute path, so a colon in it is never read as host:file", async () => {
+    t = await startArchiveHost();
+    const relative = "dcabsm-test-host:archive.tar.gz";
+    await copyFile(t.archive, relative);
+    try {
+      await t.loseShop();
+      await run(["instance", "restore", "--from", relative], t.h.ctx);
+      const tars = t.h.calls.filter((c) => c.command === "tar");
+      expect(tars.length).toBeGreaterThan(0);
+      for (const c of tars) expect(c.args.some((a) => a === relative)).toBe(false);
+      expect(tars.some((c) => c.args.includes(resolve(relative)))).toBe(true);
+    } finally {
+      await rm(relative, { force: true });
+    }
   });
 });
 
