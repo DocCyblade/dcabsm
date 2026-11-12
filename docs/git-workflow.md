@@ -19,6 +19,14 @@ DCABSM uses GitHub Flow: one long-lived branch, `main`, with short work branches
 - **Squash merge only.** The squash commit title is the pull request title, an imperative sentence such as "Add CLI walking skeleton (#33)". The commit body is the pull request body.
 - After the merge, the branch is deleted on `origin` automatically. Delete it on `Backup` by hand.
 
+## Waves
+
+A wave of related tickets may use one integration branch, `sprint/w<n>-<slug>`, instead of one branch and pull request per ticket. This is an accepted exception, used since Wave 1.
+
+- Each ticket still gets its own work branch. Merge them into the sprint branch locally with `--no-ff`, so every ticket stays a visible unit.
+- Open one pull request from the sprint branch, and squash it into `main` like any other.
+- The pull request body closes every ticket, with each `Closes #<n>` on a line of its own. GitHub reads only the first number in a line such as `Closes #a, #b`.
+
 ## Releases
 
 - A release is an annotated semver tag `vX.Y.Z` on a `main` commit. DCABSM's semver is kept apart from Actual's calendar versions (spec 11.1). Versions before V1 are `0.y.z`, and V1 is `v1.0.0`.
