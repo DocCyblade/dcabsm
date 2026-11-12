@@ -53,7 +53,7 @@ tarball=$(ls "$tarballs"/dcabsm-*-linux-amd64.tar.gz 2> /dev/null | head -n 1 ||
 version=$(basename "$tarball" | sed -E 's/^dcabsm-(.*)-linux-.*$/\1/')
 
 sshopts=(-o BatchMode=yes -o ConnectTimeout=10)
-remote="/root/dcabsm-journey"
+remote="/var/tmp/dcabsm-journey"
 # Run a command on the VM as root, with lab details removed from what comes back.
 on_vm() {
   ssh "${sshopts[@]}" "$SSH_TARGET" "if [ \"\$(id -u)\" = 0 ]; then $*; else sudo -n $*; fi" 2>&1 | lab redact "$os" ${vm_args[@]+"${vm_args[@]}"}

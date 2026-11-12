@@ -95,10 +95,8 @@ describe("OS to VM selection", () => {
   it("runs TurnKey from both its snapshots and others from their one", () => {
     const vms = loadVms(example);
     expect(snapshotsFor(vms[3]!, "turnkey")).toEqual(["clean-core", "clean-nodejs"]);
-    expect(snapshotsFor({ ...vms[3]!, snapshots: [] }, "turnkey")).toEqual([
-      "clean-core",
-      "clean-nodejs",
-    ]);
+    expect(snapshotsFor({ ...vms[3]!, snapshots: [] }, "turnkey")).toEqual(["clean"]);
+    expect(snapshotsFor({ ...vms[3]!, snapshots: ["clean"] }, "turnkey")).toEqual(["clean"]);
     expect(snapshotsFor(vms[0]!, "debian-13")).toEqual(["clean"]);
   });
 });

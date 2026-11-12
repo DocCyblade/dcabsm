@@ -121,11 +121,13 @@ export function selectVm(vms: LabVm[], os: JourneyOs, pick?: string): LabVm | un
   return undefined;
 }
 
-/** The snapshots to run from: TurnKey has two, every other VM one `clean` snapshot. */
+/** The snapshots to run from: TurnKey runs from the clean-core/clean-nodejs snapshots it has, any other VM from its first. */
 export function snapshotsFor(vm: LabVm, os: JourneyOs): string[] {
   if (os === "turnkey") {
     const named = vm.snapshots.filter((s) => (TURNKEY_SNAPSHOTS as readonly string[]).includes(s));
-    return named.length === TURNKEY_SNAPSHOTS.length ? named : [...TURNKEY_SNAPSHOTS];
+    if (named.length > 0) return named;
+    // A TurnKey VM registered with a single snapshot (one VM per flavour) runs from that one.
+    return [vm.snapshots[0] ?? "clean"];
   }
   return [vm.snapshots[0] ?? "clean"];
 }

@@ -91,7 +91,7 @@ case "$step_id" in
     status=$?
     set -e
     echo "$out"
-    expect_in "Continue?"
+    expect_in "Go ahead?"
     if [ "$(appliance)" = nodejs ]; then
       expect_in "nodejs Nginx site"
       expect_in "nothing is deleted"
