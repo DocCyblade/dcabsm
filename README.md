@@ -73,6 +73,8 @@ Webmin, Postfix, TurnKey's firewall and the rest are left alone. Don't use Webmi
 
 DCABSM is published as a signed tarball per architecture on this repo's GitHub Releases, with its own Node inside. It isn't on npm.
 
+You need root (or `sudo`), `curl`, `tar` and `gpgv` on the Host. A fresh Debian or Ubuntu usually has `tar` and `gpgv` but may lack `curl`: `sudo apt install curl`. The install script never installs packages. The by-hand steps below also need `gpg`, from the `gnupg` package.
+
 ### The signing key
 
 Releases are signed with this OpenPGP key:
