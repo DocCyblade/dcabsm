@@ -305,7 +305,9 @@ export function fakeNet(overrides: Partial<FakeNet> = {}): FakeNet {
         ];
         const verbose = args[0] === "-tvzf";
         const lines = entries.map((e) =>
-          verbose ? `${e.type}${e.perms ?? "rw-r--r--"} 0/0 ${e.size ?? 0} 2026-11-09 12:00 ${e.name}` : e.name,
+          verbose
+            ? `${e.type}${e.perms ?? "rw-r--r--"} 0/0 ${e.size ?? 0} 2026-11-09 12:00 ${e.name}`
+            : e.name,
         );
         return ok(lines.join("\n") + "\n");
       }

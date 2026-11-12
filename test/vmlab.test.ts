@@ -79,6 +79,24 @@ describe("OS to VM selection", () => {
     expect(vms).toHaveLength(3);
   });
 
+  it("matches an OS key exactly, so ubuntu-24.04-ci is not an ubuntu-24.04 VM", () => {
+    const vms = loadVms({ VMS: "CI C", TVM_CI_OS: "ubuntu-24.04-ci", TVM_C_OS: "Ubuntu 24.04" });
+    expect(selectVm(vms, "ubuntu-24.04")?.name).toBe("C");
+    expect(selectVm(vms.slice(0, 1), "ubuntu-24.04")).toBeUndefined();
+    expect(selectVm(loadVms({ VMS: "T", TVM_T_OS: "turnkey-extra" }), "turnkey")).toBeUndefined();
+  });
+
+  it("accepts LTS 24 and LTS 26 wording in PURPOSE or NOTES for the two Ubuntu releases", () => {
+    const vms = loadVms({
+      VMS: "A B",
+      TVM_A_PURPOSE: "Ubuntu LTS 24 journey",
+      TVM_B_NOTES: "Ubuntu LTS 26 netinstall",
+    });
+    expect(selectVm(vms, "ubuntu-24.04")?.name).toBe("A");
+    expect(selectVm(vms, "ubuntu-26.04")?.name).toBe("B");
+    expect(selectVm(vms, "debian-13")).toBeUndefined();
+  });
+
   it("skips a VM that is not fully described and names keys, not values", () => {
     const env = { VMS: "D", TVM_D_PURPOSE: "debian-13", TVM_D_SSH_HOST: "d.lab.invalid" };
     const sel = resolveOs(env, "debian-13");

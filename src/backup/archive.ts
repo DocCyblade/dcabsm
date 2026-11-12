@@ -150,13 +150,23 @@ export async function vetArchive(ctx: Context, archive: string): Promise<void> {
       "A DCABSM archive holds only files and directories. Do not restore an archive you do not trust.",
     );
   if (nameLines.length !== kindLines.length) throw unsafe("odd entry names", archive);
+  // `tar -tv` lines read `-rwxr-xr-x user/group 1234 date time name`: the first character is the
+  // entry type, the first ten are type plus permissions, and the third field is the size.
+  const TYPE_AT = 0;
+  const MODE_LENGTH = 10;
+  const SIZE_FIELD = 2;
+  const USER_EXEC_AT = 3;
+  const GROUP_EXEC_AT = 6;
   let unpacked = 0;
   nameLines.forEach((name, i) => {
-    unpacked += Number(kindLines[i]!.trim().split(/\s+/)[2]) || 0;
-    const kind = kindLines[i]![0];
+    const line = kindLines[i]!;
+    unpacked += Number(line.trim().split(/\s+/)[SIZE_FIELD]) || 0;
+    const kind = line[TYPE_AT];
     if (kind !== "-" && kind !== "d") throw unsafe(`type ${kind}, not a file or directory`, name);
-    const perms = kindLines[i]!.slice(0, 10);
-    if (/[sS]/.test(perms[3]! + perms[6]!)) throw unsafe("setuid or setgid bit", name);
+    const perms = line.slice(0, MODE_LENGTH);
+    if (/[sS]/.test(perms[USER_EXEC_AT]! + perms[GROUP_EXEC_AT]!)) {
+      throw unsafe("setuid or setgid bit", name);
+    }
     if (name.startsWith("/") || name.split("/").includes("..")) {
       throw unsafe("path leaves the archive", name);
     }
