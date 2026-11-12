@@ -45,7 +45,7 @@ expect_in() { # expect_in <text>: the last output has it
   case "$out" in *"$1"*) ;; *) fail "expected '$1' in the output above" ;; esac
 }
 wait_for() { # wait_for <seconds> <command...>
-  local limit="$1"
+  local limit=$(($1 * ${JOURNEY_WAIT_SCALE:-1}))
   shift
   for _ in $(seq 1 "$limit"); do
     "$@" > /dev/null 2>&1 && return 0
