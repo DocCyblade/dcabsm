@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { link, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { Context } from "./context.ts";
 import { CliError } from "./errors.ts";
@@ -60,7 +60,25 @@ export async function acquireLock(ctx: Context, command: string): Promise<() => 
         `Wait for it to finish, then run again: sudo ${command}`,
       );
     }
-    await rm(path, { force: true });
+    // Take over by renaming the stale lock aside: of several commands that saw it stale, one rename wins.
+    const aside = `${path}.stale-${process.pid}-${attempt}-${Math.random().toString(36).slice(2)}`;
+    try {
+      await rename(path, aside);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") continue;
+      throw err;
+    }
+    const moved = await readHolder(aside);
+    if (moved && alive(moved.pid)) {
+      // Another command had already taken over, and we moved its live lock. Put it back.
+      await link(aside, path).catch(() => undefined);
+      await rm(aside, { force: true });
+      throw new CliError(
+        `Another dcabsm command is running (pid ${moved.pid}: ${moved.command}).`,
+        `Wait for it to finish, then run again: sudo ${command}`,
+      );
+    }
+    await rm(aside, { force: true });
   }
   throw new CliError("Could not take the dcabsm lock.", `Try again: sudo ${command}`);
 }
