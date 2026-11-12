@@ -71,7 +71,7 @@ interface FakeArchive {
   dirs?: string[];
   files?: Record<string, string>;
   /** Extra members a hostile archive would hold, as `tar -tv` shows them: `l` for a link, `p` for a pipe, and so on. */
-  extra?: Array<{ name: string; type: string; perms?: string }>;
+  extra?: Array<{ name: string; type: string; perms?: string; size?: number }>;
 }
 
 /** Records the tree under `dir/rel` into the archive. */
@@ -299,12 +299,13 @@ export function fakeNet(overrides: Partial<FakeNet> = {}): FakeNet {
             name,
             type: "-",
             perms: undefined as string | undefined,
+            size: 0,
           })),
           ...(archive.extra ?? []),
         ];
         const verbose = args[0] === "-tvzf";
         const lines = entries.map((e) =>
-          verbose ? `${e.type}${e.perms ?? "rw-r--r--"} 0/0 0 2026-11-09 12:00 ${e.name}` : e.name,
+          verbose ? `${e.type}${e.perms ?? "rw-r--r--"} 0/0 ${e.size ?? 0} 2026-11-09 12:00 ${e.name}` : e.name,
         );
         return ok(lines.join("\n") + "\n");
       }

@@ -8,9 +8,14 @@ let t: ArchiveHost;
 afterEach(() => t.h.cleanup());
 
 /** Adds one member to the host's (fake) archive, as a hostile archive would hold it. */
-async function tampered(name: string, type: string, perms?: string): Promise<string> {
+async function tampered(
+  name: string,
+  type: string,
+  perms?: string,
+  size?: number,
+): Promise<string> {
   const archive = JSON.parse(await readFile(t.archive, "utf8"));
-  archive.extra = [{ name, type, perms }];
+  archive.extra = [{ name, type, perms, size }];
   const path = `${t.archive}.evil`;
   await writeFile(path, JSON.stringify(archive));
   return path;
@@ -50,6 +55,31 @@ describe("an untrusted archive", () => {
       0,
     );
     expect(t.err()).toContain("unsafe");
+    expect(t.sysctls()).not.toContain("stop dcabsm@shop");
+  });
+});
+
+describe("an archive that unpacks larger than the free space", () => {
+  it("is refused by restore --from and clone --from before anything is extracted", async () => {
+    t = await startArchiveHost();
+    const big = await tampered("data/huge.bin", "-", undefined, 100 * 1024 * 1024);
+    await t.loseShop();
+    expect(await run(["instance", "restore", "--from", big], t.h.ctx)).not.toBe(0);
+    expect(t.err()).toContain("unpacks to");
+    t.h.err.length = 0;
+    const clone = ["instance", "clone", "--from", big, "two", "--hostname", "two.example.org"];
+    expect(await run(clone, t.h.ctx)).not.toBe(0);
+    expect(t.err()).toContain("unpacks to");
+    expect(t.h.calls.some((c) => c.command === "tar" && c.args[0] === "-xzf")).toBe(false);
+  });
+
+  it("is refused by an in-place restore before the Instance stops", async () => {
+    t = await startArchiveHost();
+    const big = await tampered("data/huge.bin", "-", undefined, 100 * 1024 * 1024);
+    expect(await run(["instance", "restore", "shop", big, "--confirm", "shop"], t.h.ctx)).not.toBe(
+      0,
+    );
+    expect(t.err()).toContain("unpacks to");
     expect(t.sysctls()).not.toContain("stop dcabsm@shop");
   });
 });

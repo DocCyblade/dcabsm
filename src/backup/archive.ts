@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import type { Context } from "../context.ts";
 import { CliError, firstLine, refusal } from "../errors.ts";
 import { DEFAULT_BACKUP_DIR, readHostConfig } from "../host/config.ts";
+import { formatSize } from "../host/tree.ts";
 
 /** The archive format this DCABSM writes (spec 7.1). Older formats are read for good. */
 export const ARCHIVE_FORMAT = 1;
@@ -115,6 +116,19 @@ export async function listArchives(ctx: Context, name: string): Promise<ArchiveI
   return found.sort((a, b) => a.stamp.localeCompare(b.stamp));
 }
 
+/** Free bytes where `path` lives, from `df -Pk`. */
+export async function freeBytes(ctx: Context, path: string): Promise<number> {
+  const res = await ctx.runner.run("df", ["-Pk", path]);
+  const kb = Number(res.stdout.split("\n")[1]?.trim().split(/\s+/)[3]);
+  if (res.code !== 0 || !Number.isFinite(kb)) {
+    throw new CliError(
+      `Could not read the free space in ${path}.`,
+      "Check the disk, then run again",
+    );
+  }
+  return kb * 1024;
+}
+
 /**
  * Refuses an archive that holds anything but plain files and directories, or a name that is absolute
  * or climbs with `..`. Our own archives hold nothing else, and tar runs as root when it extracts, so a
@@ -136,7 +150,9 @@ export async function vetArchive(ctx: Context, archive: string): Promise<void> {
       "A DCABSM archive holds only files and directories. Do not restore an archive you do not trust.",
     );
   if (nameLines.length !== kindLines.length) throw unsafe("odd entry names", archive);
+  let unpacked = 0;
   nameLines.forEach((name, i) => {
+    unpacked += Number(kindLines[i]!.trim().split(/\s+/)[2]) || 0;
     const kind = kindLines[i]![0];
     if (kind !== "-" && kind !== "d") throw unsafe(`type ${kind}, not a file or directory`, name);
     const perms = kindLines[i]!.slice(0, 10);
@@ -145,6 +161,14 @@ export async function vetArchive(ctx: Context, archive: string): Promise<void> {
       throw unsafe("path leaves the archive", name);
     }
   });
+  // The listing gives the unpacked size, so a decompression bomb is refused before it fills the disk.
+  const free = await freeBytes(ctx, ctx.paths.instances);
+  if (unpacked > free) {
+    throw new CliError(
+      `${archive} unpacks to ${formatSize(unpacked)}, more than the ${formatSize(free)} free for Instances.`,
+      "Free some disk space, then run again.",
+    );
+  }
 }
 
 /**
