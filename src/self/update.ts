@@ -267,6 +267,7 @@ export async function selfUpdate({ ctx, args }: Invocation): Promise<void> {
       "-C",
       stage,
       "--strip-components=1",
+      "--no-same-owner",
     ]);
     if (untar.code !== 0) {
       throw new CliError(`Could not unpack the tarball: ${firstLine(untar.stderr, "tar failed")}`);

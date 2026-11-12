@@ -72,7 +72,7 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
 download() { # download <url> <file>
-  curl -fsSL -o "$2" "$1" || die "could not download $1"
+  curl -fsSL --proto '=https' --tlsv1.2 -o "$2" "$1" || die "could not download $1"
 }
 
 releases="https://github.com/$GITHUB_OWNER/$REPO/releases"
@@ -129,7 +129,7 @@ mkdir -p "$opt"
 stage="$opt/.install-$version"
 rm -rf "$stage"
 mkdir -p "$stage"
-tar -xzf "$tmp/$file" -C "$stage" --strip-components=1 || {
+tar -xzf "$tmp/$file" -C "$stage" --strip-components=1 --no-same-owner || {
   rm -rf "$stage"
   die "could not extract $file."
 }

@@ -58,7 +58,7 @@ beforeEach(async () => {
     "curl",
     `echo "$@" >> "${log}/curl"
 out=""; url=""
-while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2;; -*) shift;; *) url="$1"; shift;; esac; done
+while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2;; --proto) shift 2;; -*) shift;; *) url="$1"; shift;; esac; done
 case "$url" in
   */releases/latest) printf '{"tag_name": "v1.2.0"}' > "$out";;
   *) cp "${fixtures}/$(basename "$url")" "$out" || exit 22;;
@@ -72,6 +72,9 @@ cp "$2" "${log}/keyring"
   );
   await stub("uname", `case "$1" in -s) echo Linux;; -m) echo "$FAKE_MACHINE";; esac`);
   await stub("id", `echo "\${FAKE_UID:-0}"`);
+  // Logs its arguments, then runs the real tar.
+  const realTar = spawnSync("sh", ["-c", "command -v tar"], { encoding: "utf8" }).stdout.trim();
+  await stub("tar", `echo "$@" >> "${log}/tar"\nexec "${realTar}" "$@"`);
   await stub("apt-get", `echo "$@" >> "${log}/apt"`);
 });
 afterEach(() => rm(dir, { recursive: true, force: true }));
@@ -156,6 +159,12 @@ describe("install.sh", () => {
       "https://github.com/octo/dcabsm/releases/download/v1.2.0/dcabsm-1.2.0-linux-amd64.tar.gz",
     );
     expect(await logged("apt")).toBe("");
+    // Root must not keep the owner the tarball names: that uid may belong to a local user.
+    expect(await logged("tar")).toContain("--no-same-owner");
+    // Every download is HTTPS-only, redirects included, and TLS 1.2 at least.
+    const calls = (await logged("curl")).trim().split("\n");
+    expect(calls.length).toBeGreaterThan(0);
+    for (const call of calls) expect(call).toContain("--proto =https --tlsv1.2");
   });
 
   it("downloads the arm64 tarball on an arm64 Host", async () => {

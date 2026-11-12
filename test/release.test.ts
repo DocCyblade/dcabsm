@@ -25,6 +25,16 @@ const exists = (p: string) =>
     () => false,
   );
 
+describe("unpacking as root", () => {
+  it("never keeps the owner a tarball names, since that uid may be a local user's", async () => {
+    await start();
+    expect(await install("26.11.0")).toBe(0);
+    const untars = h.calls.filter((c) => c.command === "tar" && c.args[0] === "-xJf");
+    expect(untars.length).toBeGreaterThan(0);
+    for (const c of untars) expect(c.args).toContain("--no-same-owner");
+  });
+});
+
 describe("which versions are accepted", () => {
   it.each(["26.11.0-beta.1", "v26.11.0", "26.11", "26.11.0+x", "latest"])(
     "refuses %j as not stable, before touching the network",

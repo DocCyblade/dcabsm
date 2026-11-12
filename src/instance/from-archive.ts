@@ -9,6 +9,7 @@ import { createAccount, makeDirectories, writeConfigFiles } from "./create.ts";
 import { writeVhost } from "./files.ts";
 import { accountOf, instanceDir, parseRecord, type InstanceRecord } from "./record.ts";
 import { DATA_DIRS, regroupData, regroupedLine } from "./restore-data.ts";
+import { findSetting } from "./setting-table.ts";
 
 /** What `instance restore --from` and `instance clone` read out of an archive before they build. */
 export interface Stage {
@@ -24,6 +25,32 @@ export interface Stage {
 
 /** The members a new Instance is built from; the `release` link is never in an archive (spec 7.1). */
 const MEMBERS = ["config", "nginx", ...DATA_DIRS];
+
+/**
+ * What is wrong with a record from an archive, if anything. The archive may come from elsewhere, and
+ * the record's port and settings are written into the vhost and `config.json`.
+ */
+function recordProblem(record: InstanceRecord): string | undefined {
+  if (!Number.isInteger(record.port) || record.port < 1024 || record.port > 65535) {
+    return `a port outside 1024 to 65535 (${JSON.stringify(record.port)})`;
+  }
+  if (record.scheduledBackups !== undefined && typeof record.scheduledBackups !== "boolean") {
+    return "a scheduledBackups that is not true or false";
+  }
+  const settings: unknown = record.settings;
+  if (settings === undefined) return undefined;
+  if (typeof settings !== "object" || settings === null || Array.isArray(settings)) {
+    return "settings that are not a list of keys and values";
+  }
+  for (const [key, value] of Object.entries(settings)) {
+    const def = findSetting(key);
+    if (!def) return `a setting DCABSM does not know (${JSON.stringify(key)})`;
+    if (typeof value === "object" || def.parse(String(value)) === undefined) {
+      return `a bad value for ${key}`;
+    }
+  }
+  return undefined;
+}
 
 /**
  * Extracts an archive into a dot-prefixed work directory beside the Instances, so a bad archive
@@ -59,6 +86,8 @@ export async function extractArchive(ctx: Context, archive: string, label: strin
     if (!record) {
       throw new CliError(`${archive} holds an Instance record without a port or hostname.`);
     }
+    const problem = recordProblem(record);
+    if (problem) throw new CliError(`${archive} holds an Instance record with ${problem}.`);
     const read = async (file: string) => {
       try {
         return await readFile(join(dir, "nginx", file), "utf8");
