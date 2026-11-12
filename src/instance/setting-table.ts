@@ -1,5 +1,8 @@
 import { isIP } from "node:net";
+import type { Context } from "../context.ts";
+import { step } from "../output.ts";
 import { compareText } from "../release/semver.ts";
+import type { InstanceRecord } from "./record.ts";
 
 /** A value as the record holds it: a number, a boolean or a string. */
 export type SettingValue = number | boolean | string;
@@ -161,4 +164,13 @@ export const UPLOAD_KEYS: readonly string[] = UPLOAD_SETTINGS.map((s) => s.key);
 /** Nginx's `client_max_body_size` in MB: just above the largest upload limit (spec 5.2). */
 export function bodyLimitMb(settings: Record<string, SettingValue> | undefined): number {
   return Math.max(...UPLOAD_SETTINGS.map((d) => effectiveMb(d, settings))) + 1;
+}
+
+/** Names the settings the Release can't use (spec 4.11): the record keeps them for a later Upgrade. */
+export function reportUnusedSettings(ctx: Context, record: InstanceRecord, release: string): void {
+  for (const def of SETTINGS) {
+    if (record.settings?.[def.key] !== undefined && !usedBy(def, release)) {
+      step(ctx, "info", `${def.key}: not used by ${release}`);
+    }
+  }
 }

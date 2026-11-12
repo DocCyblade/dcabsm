@@ -38,7 +38,7 @@ Commands are `dcabsm <noun> <verb> [args] [flags]`. There are no flat verbs and 
 | | `instance set <name> <key> <value> [--yes]` | Change one Instance setting |
 | | `instance unset <name> <key> [--yes]` | Return one Instance setting to Actual's default |
 | | `instance upgrade <names>\|--all [--to <v>] [--yes]` | Move Instances to a newer Release |
-| | `instance rollback <name> [--restore-data] [--confirm <name>]` | Go back one step to the previous Release |
+| | `instance rollback <name> [--restore-data] [--yes] [--confirm <name>]` | Go back one step to the previous Release |
 | | `instance restore <name> [<archive>] [--confirm <name>]` | Restore an Instance from a Backup |
 | | `instance restore --from <archive>` | Rebuild an Instance from an archive on a new Host |
 | | `instance clone <source> <new> --hostname <host> [cert options] [--yes]` | Copy an Instance under a new name and hostname |
@@ -280,6 +280,7 @@ Read-only. Takes no lock.
   ✓ family: config, vhost, ownership, port, certificate 212 days
   · test: self-signed certificate, not trusted by system CAs
   ✓ Scheduled backups newer than 48 hours for every Instance
+  ✗ test has an unfinished Release change (upgrade, 26.10.0 → 26.11.1): run sudo dcabsm instance rollback test
 
 exit 1: 0 pass or notes, 1 warnings, 2 failures
 ```
@@ -373,7 +374,7 @@ DCABSM 1.2.0 · Nightly run 03:30 · last check 2026-11-07 12:00 UTC
 → Node 24.11.2 patch for Node 24: sudo dcabsm release update-node
 ```
 
-- An Instance with an unfinished Release change shows `CHANGING` as its state. `start` and `restart` refuse it and point to `instance upgrade` or `instance rollback`; `stop` still works.
+- An Instance with an unfinished Release change shows `CHANGING` as its state. `start` and `restart` refuse it and point to `instance rollback`; `stop` still works. Below the table a warning names the operation, its Releases and the `instance rollback` command.
 - LAST SCHEDULED shows `off` when scheduled Backups are off, and `none` when there are none. It warns when an Instance with scheduled Backups on has none newer than 48 hours.
 - The Unsupported Host mark is always shown.
 - With no Instances, it points to `instance create`.
@@ -395,7 +396,7 @@ family  active
   Settings           upload-sync-limit-mb 100
 ```
 
-It lists the Instance settings the System Admin set, and marks any the current Release doesn't use as "not used by <release>". An unfinished Release change shows as a warning with the `instance rollback` command.
+It lists the Instance settings the System Admin set, and marks any the current Release doesn't use as "not used by <release>". An unfinished Release change shows as `CHANGING` and a warning with the `instance rollback` command.
 
 ### instance create
 
@@ -567,7 +568,7 @@ Restart family now? [Y/n]
 
 OpenID is set up in Actual's own web UI, not through DCABSM ([ADR-0005](adr/0005-openid-belongs-to-actual.md)). Actual stores it, client secret included, in the Instance's `server-files/`, so Backups and Clones carry it.
 
-1. With your OpenID provider, register a client for the Instance with the redirect URL `https://<hostname>`, the Instance's own hostname.
+1. With your OpenID provider, register a client for the Instance with the redirect URL `https://<hostname>/openid/callback`, using the Instance's own hostname (Actual's OpenID documentation gives this path).
 2. Log in to the Instance as its server owner, and switch the server to OpenID in Actual's settings, giving the provider's details. Actual's own documentation has the exact steps for your Release.
 3. If you want, set `openid-enforce` and `openid-user-creation` with `instance set`.
 
@@ -634,7 +635,7 @@ On every device
 
 ### instance rollback
 
-`instance rollback <name> [--restore-data] [--confirm <name>]`
+`instance rollback <name> [--restore-data] [--yes] [--confirm <name>]`
 
 Goes one step back, to the Release recorded in the Instance's newest Pre-upgrade backup. **Read [Here be dragons](#here-be-dragons) first.**
 
@@ -677,7 +678,9 @@ It ends with the same device advice as [instance restore](#instance-restore).
 
 - If the newest Pre-upgrade backup is already on the current Release, there is nothing to roll back, and it points to `instance restore`.
 - A Release removed by `release prune` is reinstalled from npm.
-- **After an interruption**, such as a reboot during an Upgrade or restore, `instance rollback <name>` is the only command that runs for that Instance, and it finishes the job safely (spec 6.6).
+- **After an interruption**, such as a reboot during an Upgrade or restore, `instance rollback <name>` is the only changing command that runs for that Instance, and it finishes the job safely (spec 6.6). It asks `Continue? [y/N]` (`--yes` answers), then: after an interrupted Upgrade it restores the Backup in the marker and returns to the from Release, with no Regroup; after an interrupted restore, or an interrupted `--restore-data`, it repeats the restore, with a Regroup and the device advice; after an interrupted rollback that kept data, it goes to the marker's to Release and keeps the data. If that fails too, the Instance stays stopped and the marker stays.
+- `--yes` answers the `Continue?` prompt. `--confirm <name>` answers the typed-name prompt, and also the `Continue?` prompt, so a script needs only one flag. `--restore-data` always needs `--confirm <name>` without a terminal: `--yes` alone is refused.
+- If even the return to the newer Release fails, the Instance stays stopped with the marker, and running `instance rollback` again finishes the return.
 - Any Instance setting the older Release doesn't know is listed as "not used by <release>".
 
 <a id="restore"></a>
@@ -714,7 +717,7 @@ On every device
 - Any Instance setting the archive's Release doesn't know is listed as `<key>: not used by <release>`.
 - If verification fails, DCABSM restores the `pre-restore` Backup automatically.
 - A stopped Instance returns to stopped.
-- A path given where the name belongs is refused, with a pointer to `--from` (marked "coming in a later release" until it exists).
+- A path given where the name belongs is refused, with a pointer to `--from`.
 
 ### instance restore --from
 
@@ -769,9 +772,10 @@ Continue? [y/N] y
   ! Logins are copied: everyone who can log in to family can log in to family-test, with the same passwords.
 ```
 
+- The clone keeps the source's Instance settings and its scheduled-Backups on/off flag, so a clone of an Instance with no schedule has none. `instance restore --from` does the same: it rebuilds the Instance as the archive's record says.
 - `--hostname` is required. A clone always gets its own hostname, checked as in `instance create`.
 - The source's certificate is copied only if it covers the new hostname, such as a wildcard. Otherwise give `--cert`/`--key` or `--self-signed`, or answer the certificate prompt.
-- Everything inside Actual is copied, including users, passwords and OpenID settings. The OpenID settings name the source's hostname, so if the source uses OpenID, update them in the clone and add its redirect URL at the provider.
+- Everything inside Actual is copied, including users, passwords and OpenID settings. The OpenID settings name the source's hostname, so if the source uses OpenID, update them in the clone and add `https://<hostname>/openid/callback` for the clone's hostname as a redirect URL at the provider.
 
 ## backup
 
@@ -830,6 +834,8 @@ Applies Retention by hand, with the same counts as the Nightly run (spec 8.3). W
 ```
   · Would delete family/20261001T033000Z-scheduled-26.10.0.tar.gz
 ```
+
+With `--all`, an Instance with an unfinished Release change (a `.changing-release` marker) is skipped with a warning, so the Backup the marker names stays; the other Instances are pruned. Naming that Instance refuses.
 
 With nothing to delete: "Nothing to prune. Keeping newest 14 scheduled, 5 pre-upgrade, 5 pre-restore, 5 pre-clone; manual backups are never pruned."
 

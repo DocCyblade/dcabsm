@@ -1,5 +1,5 @@
 import { refusal } from "../errors.ts";
-import { checkName, requireInstance, writeRecord } from "../instance/record.ts";
+import { checkName, refuseIfChanging, requireInstance, writeRecord } from "../instance/record.ts";
 import { step } from "../output.ts";
 import type { Invocation } from "../table.ts";
 
@@ -12,6 +12,7 @@ export async function backupSchedule({ ctx, args }: Invocation): Promise<void> {
   }
   checkName(name);
   const record = await requireInstance(ctx, name);
+  await refuseIfChanging(ctx, name);
   await writeRecord(ctx, name, { ...record, scheduledBackups: state === "on" });
   step(
     ctx,

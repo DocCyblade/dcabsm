@@ -190,6 +190,7 @@ describe("instance restore", () => {
       from: "26.11.0",
       to: "26.11.0",
       backup: backups("shop", "20261109T120000Z-pre-restore-26.11.0.tar.gz"),
+      archive: backups("shop", old),
       restoringData: true,
     });
     expect(markers.at(-1)!.gate).toBe(true);
@@ -254,7 +255,7 @@ describe("instance restore", () => {
     const old = await start();
     expect(await restore(backups("shop", old))).toBe(2);
     expect(err()).toContain("instance restore --from");
-    expect(err()).toContain("(coming in a later release)");
+
     expect(await restore("shop.tar.gz")).toBe(2);
     expect(sysctls()).toEqual([]);
     expect(await readFile(inst("data", "notes"), "utf8")).toBe("v2");

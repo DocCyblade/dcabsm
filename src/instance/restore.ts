@@ -1,8 +1,12 @@
-import { stat } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { basename } from "node:path";
 import { parseCommand } from "../args.ts";
-import { backupRoot, listArchives, readManifest, type Manifest } from "../backup/archive.ts";
-import { checkSpace, RUNNING_STATES, takeBackup } from "../backup/create.ts";
+import {
+  listArchives,
+  readManifest,
+  requireArchiveFile,
+  type Manifest,
+} from "../backup/archive.ts";
+import { checkSpace, RUNNING_STATES } from "../backup/create.ts";
 import type { Context } from "../context.ts";
 import { CliError, errorMessage, refusal } from "../errors.ts";
 import { systemctl } from "../host/system.ts";
@@ -15,11 +19,9 @@ import type { Invocation } from "../table.ts";
 import { beforeRestoreAdvice, deviceAdvice } from "./device-advice.ts";
 import { writeVhost } from "./files.ts";
 import { unitStateOf } from "./list.ts";
-import { regroup } from "./regroup.ts";
 import {
   accountOf,
   checkName,
-  instanceDir,
   refuseIfChanging,
   removeMarker,
   requireInstance,
@@ -28,22 +30,20 @@ import {
   writeMarker,
   type InstanceRecord,
 } from "./record.ts";
-import { chownData, restoreData } from "./restore-data.ts";
-import { SETTINGS, usedBy } from "./setting-table.ts";
-import { withStartGate } from "./start-gate.ts";
+import { regroupedLine, restoreAndRegroup, restoreData, stopAndBackUp } from "./restore-data.ts";
+import { restoreFrom } from "./restore-from.ts";
+import { reportUnusedSettings } from "./setting-table.ts";
+import { startThroughGate } from "./start-gate.ts";
 import { switchRelease } from "./switch.ts";
-import { startVerified } from "./verify.ts";
 import { planIfMissing } from "./upgrade-plan.ts";
 
-const USAGE = "Usage: dcabsm instance restore <name> [<archive>] [--confirm <name>]";
+const USAGE =
+  "Usage: dcabsm instance restore <name> [<archive>] [--confirm <name>] | restore --from <archive>";
 
 /** The archive to restore: the one given, or the newest in the Instance's backup directory. */
 async function pickArchive(ctx: Context, name: string, given: string | undefined) {
   if (given !== undefined) {
-    const found = await stat(given).catch(() => undefined);
-    if (!found?.isFile()) {
-      throw refusal(`${given} is not an archive file.`, "Give the path of a .tar.gz archive.");
-    }
+    await requireArchiveFile(given);
     return given;
   }
   const newest = (await listArchives(ctx, name)).at(-1);
@@ -56,15 +56,6 @@ async function pickArchive(ctx: Context, name: string, given: string | undefined
   return newest.path;
 }
 
-/** Names the settings the Release can't use (spec 4.11): the record keeps them for a later Upgrade. */
-function reportUnusedSettings(ctx: Context, record: InstanceRecord, release: string): void {
-  for (const def of SETTINGS) {
-    if (record.settings?.[def.key] !== undefined && !usedBy(def, release)) {
-      step(ctx, "info", `${def.key}: not used by ${release}`);
-    }
-  }
-}
-
 interface Job {
   name: string;
   record: InstanceRecord;
@@ -74,10 +65,6 @@ interface Job {
   from: string;
   wasUp: boolean;
 }
-
-/** Starts and verifies `release` with the unit's marker rule lifted (spec 6.1 step 7). */
-const startThroughGate = (ctx: Context, job: Job, release: string): Promise<void> =>
-  withStartGate(ctx, job.name, () => startVerified(ctx, job.name, job.record.port, { release }));
 
 /**
  * Puts the `pre-restore` Backup back, with no Regroup: the Instance was stopped from that Backup
@@ -100,37 +87,24 @@ async function restoreInstance(ctx: Context, job: Job): Promise<void> {
   const to = manifest.release;
   const unit = unitName(name);
 
-  await systemctl(ctx, "stop", unit);
-  step(ctx, "done", `Stopped ${name}`);
-  let file: string;
-  try {
-    file = await takeBackup(ctx, name, "pre-restore");
-  } catch (err) {
-    // Nothing has changed yet, so a running Instance goes back up as it was.
-    if (job.wasUp) {
-      try {
-        await systemctl(ctx, "start", unit);
-        step(ctx, "info", `${name} was running before the restore, so it is started again`);
-      } catch (again) {
-        step(ctx, "warn", `Could not start ${name} again: ${errorMessage(again)}`);
-      }
-    }
-    throw err;
-  }
-  const backup = join(await backupRoot(ctx), name, file);
-  await writeMarker(ctx, name, { operation: "restore", from, to, backup, restoringData: true });
+  const backup = await stopAndBackUp(ctx, name, job.wasUp);
+  await writeMarker(ctx, name, {
+    operation: "restore",
+    from,
+    to,
+    backup,
+    archive: job.archive,
+    restoringData: true,
+  });
 
   try {
-    await restoreData(ctx, name, job.archive);
+    const count = await restoreAndRegroup(ctx, name, job.archive);
     step(
       ctx,
       "done",
       `Replaced data, server-files and user-files; ownership set for ${accountOf(name)}`,
     );
-    const dir = instanceDir(ctx, name);
-    const count = await regroup(join(dir, "server-files"), join(dir, "user-files"));
-    await chownData(ctx, name);
-    step(ctx, "done", `Regrouped ${count} Budget file${count === 1 ? "" : "s"}`);
+    step(ctx, "done", regroupedLine(count));
     await switchRelease(ctx, name, record, to);
     // The same text as before unless someone edited it by hand, and the hostname and certificate
     // are unchanged, so Nginx needs no reload.
@@ -146,7 +120,7 @@ async function restoreInstance(ctx: Context, job: Job): Promise<void> {
       step(ctx, "failed", `Automatic rollback failed: ${errorMessage(again)}`);
       throw new CliError(
         `Restore of ${name} failed, and so did the automatic rollback. ${name} stays stopped.`,
-        `Its pre-restore backup is kept: ${backup}\n  Then try: sudo dcabsm instance rollback ${name}`,
+        `Its pre-restore Backup is kept: ${backup}\n  Then try: sudo dcabsm instance rollback ${name}`,
       );
     }
     await removeMarker(ctx, name);
@@ -171,7 +145,10 @@ export async function instanceRestore({ ctx, args }: Invocation): Promise<void> 
     from: { type: "string" },
   });
   if (values.from !== undefined) {
-    throw refusal("instance restore --from is not available yet.", USAGE);
+    if (positionals.length > 0) {
+      throw refusal("instance restore --from takes an archive and no Instance name.", USAGE);
+    }
+    return restoreFrom(ctx, values.from);
   }
   if (positionals.length < 1 || positionals.length > 2) {
     throw refusal("Give an Instance name and, if you like, an archive.", USAGE);
@@ -180,7 +157,7 @@ export async function instanceRestore({ ctx, args }: Invocation): Promise<void> 
   if (name.includes("/") || name.endsWith(".tar.gz")) {
     throw refusal(
       `${name} looks like an archive, but a restore in place takes an Instance name first.`,
-      `To rebuild an Instance from an archive: sudo dcabsm instance restore --from ${name} (coming in a later release)`,
+      `To rebuild an Instance from an archive: sudo dcabsm instance restore --from ${name}`,
     );
   }
   checkName(name);

@@ -191,6 +191,42 @@ expect_ok dcabsm backup prune alpha
 expect_ok dcabsm backup list alpha
 expect_in "manual"
 
+step "Roll alpha back one step, keeping its data, then upgrade it again"
+expect_ok dcabsm instance rollback alpha --yes
+expect_in "keeping current data"
+expect_in "Click Update now"
+wait_for 60 up alpha.test
+run info alpha.test
+expect_in "26.10.0"
+[ ! -e /srv/dcabsm/instances/alpha/.changing-release ] || fail "the change marker was left behind by rollback"
+expect_refusal "Nothing to roll back" dcabsm instance rollback alpha --yes
+up beta.test || fail "rolling alpha back took beta down"
+expect_ok dcabsm instance upgrade alpha --to 26.11.0 --yes
+wait_for 60 up alpha.test
+run info alpha.test
+expect_in "26.11.0"
+
+step "Roll alpha back restoring its data, then upgrade it again"
+# A file made after the Pre-upgrade backup is gone once that backup's data is put back.
+touch /srv/dcabsm/instances/alpha/server-files/journey-after-upgrade
+expect_refusal "--confirm" dcabsm instance rollback alpha --restore-data --yes
+expect_ok dcabsm instance rollback alpha --restore-data --confirm alpha
+expect_in "Regrouped"
+expect_in "Click Update now"
+wait_for 60 up alpha.test
+run info alpha.test
+expect_in "26.10.0"
+[ ! -e /srv/dcabsm/instances/alpha/server-files/journey-after-upgrade ] ||
+  fail "rollback --restore-data kept data made after the Pre-upgrade backup"
+[ ! -e /srv/dcabsm/instances/alpha/.changing-release ] || fail "the change marker was left behind by rollback --restore-data"
+expect_ok dcabsm backup list alpha
+expect_in "pre-restore"
+up beta.test || fail "rolling alpha back with its data took beta down"
+expect_ok dcabsm instance upgrade alpha --to 26.11.0 --yes
+wait_for 60 up alpha.test
+run info alpha.test
+expect_in "26.11.0"
+
 step "Node patches: nothing newer is pinned, and the Instances stay up"
 expect_ok dcabsm release update-node --yes
 wait_for 30 up alpha.test
@@ -292,6 +328,45 @@ ls /srv/dcabsm/backups | grep -q '^beta\.removed-' || fail "beta's Backups were 
 expect_ok dcabsm instance list
 case "$out" in *beta*) fail "beta is still listed after remove" ;; esac
 up alpha.test || fail "removing beta took alpha down"
+
+step "Restore --from rebuilds an Instance that was lost"
+expect_ok dcabsm backup create alpha
+lost="$(ls -t /srv/dcabsm/backups/alpha/*.tar.gz | head -1)"
+cp "$lost" /root/alpha-lost.tar.gz
+# While alpha exists, --from refuses and points to the two ways forward.
+expect_refusal "already exists" dcabsm instance restore --from /root/alpha-lost.tar.gz
+expect_in "instance clone --from"
+expect_ok dcabsm instance remove alpha --confirm alpha
+wait_for 30 down alpha.test
+expect_ok dcabsm instance restore --from /root/alpha-lost.tar.gz
+expect_in "Point DNS for alpha.test"
+expect_in "Click Revert"
+wait_for 60 up alpha.test
+run info alpha.test
+expect_in "26.11.0"
+id dcabsm-alpha > /dev/null 2>&1 || fail "restore --from did not create alpha's account"
+expect_ok dcabsm instance list
+expect_in "alpha"
+
+step "Clone alpha from the Instance, then from an archive"
+echo "127.0.0.1 delta.test epsilon.test" >> /etc/hosts
+# Alpha's certificate does not cover delta.test, so a clone without certificate options is refused.
+expect_refusal "--self-signed" dcabsm instance clone alpha delta --hostname delta.test --yes
+expect_ok dcabsm instance clone alpha delta --hostname delta.test --self-signed --yes
+expect_in "Logins are copied"
+expect_in "OpenID"
+wait_for 60 up delta.test
+wait_for 30 up alpha.test
+expect_ok dcabsm backup list alpha
+expect_in "pre-clone"
+id dcabsm-delta > /dev/null 2>&1 || fail "clone did not create delta's account"
+expect_ok dcabsm instance clone --from /root/alpha-lost.tar.gz epsilon --hostname epsilon.test --self-signed
+wait_for 60 up epsilon.test
+expect_ok dcabsm instance list
+expect_in "delta"
+expect_in "epsilon"
+expect_ok dcabsm instance remove delta --confirm delta
+expect_ok dcabsm instance remove epsilon --confirm epsilon
 
 echo
 echo "journey: pinned journey passed ($n steps)"

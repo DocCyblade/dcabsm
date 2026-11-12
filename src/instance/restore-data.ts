@@ -1,8 +1,14 @@
 import { mkdir, readdir, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { Context } from "../context.ts";
-import { CliError, firstLine } from "../errors.ts";
-import { accountOf, instanceDir } from "./record.ts";
+import { backupPath } from "../backup/archive.ts";
+import { takeBackup } from "../backup/create.ts";
+import { CliError, errorMessage, firstLine } from "../errors.ts";
+import { exists } from "../fsutil.ts";
+import { systemctl } from "../host/system.ts";
+import { step } from "../output.ts";
+import { regroup } from "./regroup.ts";
+import { accountOf, instanceDir, unitName } from "./record.ts";
 
 /** What a restore replaces; everything else in the Instance directory stays (spec 7.4). */
 export const DATA_DIRS = ["data", "server-files", "user-files"];
@@ -57,5 +63,57 @@ export async function chownData(ctx: Context, name: string): Promise<void> {
   ]);
   if (chown.code !== 0) {
     throw new CliError(`chown failed: ${firstLine(chown.stderr, `exit ${chown.code}`)}`);
+  }
+}
+
+/**
+ * Regroups the Budget files in `server-files/` (spec 7.5) and sets ownership. An Instance that never
+ * started has no `account.sqlite` and nothing to regroup. Returns how many files were regrouped.
+ */
+export async function regroupData(ctx: Context, name: string): Promise<number> {
+  const dir = instanceDir(ctx, name);
+  const serverFiles = join(dir, "server-files");
+  const count = (await exists(join(serverFiles, "account.sqlite")))
+    ? await regroup(serverFiles, join(dir, "user-files"))
+    : 0;
+  await chownData(ctx, name);
+  return count;
+}
+
+/** The restore core (spec 7.4): replaces the data from `archive`, then regroups. Returns the Regroup count. */
+export async function restoreAndRegroup(
+  ctx: Context,
+  name: string,
+  archive: string,
+): Promise<number> {
+  await restoreData(ctx, name, archive);
+  return regroupData(ctx, name);
+}
+
+/** The "Regrouped N Budget files" line. */
+export const regroupedLine = (count: number): string =>
+  `Regrouped ${count} Budget file${count === 1 ? "" : "s"}`;
+
+/**
+ * Stops the Instance and takes its `pre-restore` Backup, returning the path. If that fails nothing
+ * has changed yet, so an Instance that was running goes back up (a failed start is only a warning)
+ * and the original error is rethrown.
+ */
+export async function stopAndBackUp(ctx: Context, name: string, wasUp: boolean): Promise<string> {
+  const unit = unitName(name);
+  await systemctl(ctx, "stop", unit);
+  step(ctx, "done", `Stopped ${name}`);
+  try {
+    return await backupPath(ctx, name, await takeBackup(ctx, name, "pre-restore"));
+  } catch (err) {
+    if (wasUp) {
+      try {
+        await systemctl(ctx, "start", unit);
+        step(ctx, "info", `${name} was running before, so it is started again`);
+      } catch (again) {
+        step(ctx, "warn", `Could not start ${name} again: ${errorMessage(again)}`);
+      }
+    }
+    throw err;
   }
 }

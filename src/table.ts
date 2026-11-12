@@ -15,7 +15,9 @@ import { instanceCreate } from "./instance/create.ts";
 import { instanceLogs, instanceRestart, instanceStart, instanceStop } from "./instance/controls.ts";
 import { instanceList, instanceShow } from "./instance/list.ts";
 import { instanceRemove } from "./instance/remove.ts";
+import { instanceClone } from "./instance/clone.ts";
 import { instanceRestore } from "./instance/restore.ts";
+import { instanceRollback } from "./instance/rollback.ts";
 import { instanceUpgrade } from "./instance/upgrade.ts";
 import { instanceResetPassword } from "./instance/reset-password.ts";
 import { instanceSetHostname } from "./instance/set-hostname.ts";
@@ -207,9 +209,10 @@ export const table: Noun[] = [
       },
       {
         name: "rollback",
-        usage: "rollback <name> [--restore-data] [--confirm <name>]",
+        usage: "rollback <name> [--restore-data] [--yes] [--confirm <name>]",
         summary: "Go back one step to the previous Release",
         changes: true,
+        run: instanceRollback,
       },
       {
         name: "restore",
@@ -224,6 +227,7 @@ export const table: Noun[] = [
           "clone <source> <new> --hostname <host> [cert options] [--yes] | clone --from <archive> <new> ...",
         summary: "Copy an Instance, or make a new one from an archive",
         changes: true,
+        run: instanceClone,
       },
     ],
   },
