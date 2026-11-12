@@ -114,7 +114,7 @@ export async function listArchives(ctx: Context, name: string): Promise<ArchiveI
 /**
  * Refuses an archive that holds anything but plain files and directories, or a name that is absolute
  * or climbs with `..`. Our own archives hold nothing else, and tar runs as root when it extracts, so a
- * symlink, hard link, device node or pipe in an archive from elsewhere is an attack, not data.
+ * symlink, hard link, device node, pipe or setuid file in an archive from elsewhere is an attack, not data.
  */
 export async function vetArchive(ctx: Context, archive: string): Promise<void> {
   const names = await ctx.runner.run("tar", ["-tzf", archive]);
@@ -135,6 +135,8 @@ export async function vetArchive(ctx: Context, archive: string): Promise<void> {
   nameLines.forEach((name, i) => {
     const kind = kindLines[i]![0];
     if (kind !== "-" && kind !== "d") throw unsafe(`type ${kind}, not a file or directory`, name);
+    const perms = kindLines[i]!.slice(0, 10);
+    if (/[sS]/.test(perms[3]! + perms[6]!)) throw unsafe("setuid or setgid bit", name);
     if (name.startsWith("/") || name.split("/").includes("..")) {
       throw unsafe("path leaves the archive", name);
     }

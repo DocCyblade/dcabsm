@@ -7,28 +7,30 @@ let t: ArchiveHost;
 afterEach(() => t.h.cleanup());
 
 /** Adds one member to the host's (fake) archive, as a hostile archive would hold it. */
-async function tampered(name: string, type: string): Promise<string> {
+async function tampered(name: string, type: string, perms?: string): Promise<string> {
   const archive = JSON.parse(await readFile(t.archive, "utf8"));
-  archive.extra = [{ name, type }];
+  archive.extra = [{ name, type, perms }];
   const path = `${t.archive}.evil`;
   await writeFile(path, JSON.stringify(archive));
   return path;
 }
 
-const cases: Array<[string, string, string]> = [
+const cases: Array<[string, string, string, string?]> = [
   ["a symlink", "data/escape", "l"],
   ["a hard link", "data/again", "h"],
   ["a device node", "data/dev", "c"],
   ["a pipe", "data/pipe", "p"],
   ["an absolute path", "/etc/cron.d/x", "-"],
   ["a .. path", "data/../../../etc/x", "-"],
+  ["a setuid file", "data/su", "-", "rwsr-xr-x"],
+  ["a setgid file", "data/sg", "-", "rwxr-sr-x"],
 ];
 
 describe("an untrusted archive", () => {
-  for (const [what, name, type] of cases) {
+  for (const [what, name, type, perms] of cases) {
     it(`is refused when it holds ${what}, by restore --from and clone --from`, async () => {
       t = await startArchiveHost();
-      const evil = await tampered(name, type);
+      const evil = await tampered(name, type, perms);
       await t.loseShop();
       expect(await run(["instance", "restore", "--from", evil], t.h.ctx)).not.toBe(0);
       expect(t.err()).toContain("unsafe");
