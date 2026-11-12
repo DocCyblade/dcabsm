@@ -1,6 +1,6 @@
 // The static HTTPS server the container layer points npm's registry, nodejs.org and GitHub at
 // (spec 13.3). It serves files from <root>/<host>/<path> and nothing else.
-// Usage: node test/container/mirror.ts <root> <cert.pem> <key.pem> [port]
+// Usage: node test/container/mirror.ts <root> <cert.pem> <key.pem> [port] [address]
 import { createReadStream, readFileSync, statSync } from "node:fs";
 import { createServer } from "node:https";
 import { join, resolve, sep } from "node:path";
@@ -21,7 +21,7 @@ export function mirrorPath(root: string, host: string, urlPath: string): string 
   return file.startsWith(base + sep) ? file : undefined;
 }
 
-function serve(root: string, cert: string, key: string, port: number): void {
+function serve(root: string, cert: string, key: string, port: number, address: string): void {
   const server = createServer({ cert: readFileSync(cert), key: readFileSync(key) }, (req, res) => {
     const file = mirrorPath(root, req.headers.host ?? "", req.url ?? "/");
     let size = -1;
@@ -38,14 +38,16 @@ function serve(root: string, cert: string, key: string, port: number): void {
     res.writeHead(200, { "content-length": size });
     createReadStream(file).pipe(res);
   });
-  server.listen(port, "0.0.0.0", () => console.log(`mirror on :${port}`));
+  server.listen(port, address, () => console.log(`mirror on :${port}`));
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const [root, cert, key, port] = process.argv.slice(2);
+  const [root, cert, key, port, address] = process.argv.slice(2);
   if (!root || !cert || !key) {
-    console.error("Usage: node test/container/mirror.ts <root> <cert.pem> <key.pem> [port]");
+    console.error(
+      "Usage: node test/container/mirror.ts <root> <cert.pem> <key.pem> [port] [address]",
+    );
     process.exit(2);
   }
-  serve(root, cert, key, Number(port ?? 443));
+  serve(root, cert, key, Number(port ?? 443), address ?? "0.0.0.0");
 }
