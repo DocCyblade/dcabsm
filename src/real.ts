@@ -4,10 +4,13 @@ import { connect } from "node:tls";
 import { createInterface } from "node:readline/promises";
 import type { CommandRunner, Fetcher, Io } from "./context.ts";
 
+/** execFile kills a command at 1 MB of output; a `tar -t` of a big Instance prints more. */
+const MAX_OUTPUT = 256 * 1024 * 1024;
+
 export const realRunner: CommandRunner = {
   run: (command, args) =>
     new Promise((resolve) => {
-      execFile(command, args, (error, stdout, stderr) => {
+      execFile(command, args, { maxBuffer: MAX_OUTPUT }, (error, stdout, stderr) => {
         const code = error ? (typeof error.code === "number" ? error.code : 1) : 0;
         resolve({ code, stdout, stderr });
       });
