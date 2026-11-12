@@ -5,7 +5,7 @@ Work deliberately left out of V1, which might come later. Nothing here is promis
 ## Hosts
 
 - **LXC on Proxmox as a Host.** V1 refuses every container (spec 10.3), because the Instance sandbox and the systemd design break in an unprivileged container. TurnKey's LXC templates come with this.
-- **arm64 fully supported.** arm64 is built and CI-tested in V1. It becomes fully supported once an arm64 VM passes the OS gate (spec 13.6).
+- **arm64 fully supported.** arm64 is built in V1, and its unit tests run in CI, but it has not been run on a real Host. It becomes fully supported once an arm64 VM passes the OS gate (spec 13.6).
 - **nginx.org's Nginx package.** V1 refuses it unless an override marks the Host as an Unsupported Host (spec 10.4). It would very likely work, since DCABSM only writes to `conf.d`, but supporting it means testing a second Nginx version on every OS.
 - **Adopting an existing Actual install**, so a server already running Actual can move under DCABSM.
 
