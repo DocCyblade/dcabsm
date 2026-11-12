@@ -72,7 +72,7 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
 download() { # download <url> <file>
-  curl -fsSL -o "$2" "$1" || die "could not download $1"
+  curl -fsSL --proto '=https' --tlsv1.2 -o "$2" "$1" || die "could not download $1"
 }
 
 releases="https://github.com/$GITHUB_OWNER/$REPO/releases"

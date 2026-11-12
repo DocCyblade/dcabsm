@@ -58,7 +58,7 @@ beforeEach(async () => {
     "curl",
     `echo "$@" >> "${log}/curl"
 out=""; url=""
-while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2;; -*) shift;; *) url="$1"; shift;; esac; done
+while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2;; --proto) shift 2;; -*) shift;; *) url="$1"; shift;; esac; done
 case "$url" in
   */releases/latest) printf '{"tag_name": "v1.2.0"}' > "$out";;
   *) cp "${fixtures}/$(basename "$url")" "$out" || exit 22;;
@@ -156,6 +156,10 @@ describe("install.sh", () => {
       "https://github.com/octo/dcabsm/releases/download/v1.2.0/dcabsm-1.2.0-linux-amd64.tar.gz",
     );
     expect(await logged("apt")).toBe("");
+    // Every download is HTTPS-only, redirects included, and TLS 1.2 at least.
+    const calls = (await logged("curl")).trim().split("\n");
+    expect(calls.length).toBeGreaterThan(0);
+    for (const call of calls) expect(call).toContain("--proto =https --tlsv1.2");
   });
 
   it("downloads the arm64 tarball on an arm64 Host", async () => {
