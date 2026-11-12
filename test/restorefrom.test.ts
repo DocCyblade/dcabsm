@@ -32,6 +32,7 @@ describe("instance restore --from", () => {
       port: 15127,
       hostname: "shop.example.org",
       scheduledBackups: true,
+      createdAt: expect.any(String),
       settings: { "upload-limit-mb": 60 },
     });
     expect(await readFile(t.inst("shop", "nginx", "cert.pem"), "utf8")).toBe(oldCert);
