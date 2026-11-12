@@ -22,39 +22,39 @@ Commands are `dcabsm <noun> <verb> [args] [flags]`. There are no flat verbs and 
 | Noun | Command | What it does |
 |---|---|---|
 | `host` | `host setup [--release <v>] [--backup-dir <path>] [--yes]` | Prepare the Host and install the first Release |
-| | `host doctor [--fix] [--yes]` | Check the Host and every Instance, and optionally fix what DCABSM owns |
-| | `host check-updates` | Look for a newer Actual Release, Node patch and DCABSM version |
-| | `host settings` | Show the Host settings |
-| | `host set <key> <value>` | Change one Host setting |
+|  | `host doctor [--fix] [--yes]` | Check the Host and every Instance, and optionally fix what DCABSM owns |
+|  | `host check-updates` | Look for a newer Actual Release, Node patch and DCABSM version |
+|  | `host settings` | Show the Host settings |
+|  | `host set <key> <value>` | Change one Host setting |
 | `instance` | `instance list` | The overview: every Instance, then the last update check |
-| | `instance show <name>` | One Instance in detail |
-| | `instance create <name> --hostname <host> (--cert <f> --key <f> \| --self-signed) [--release <v>] [--yes]` | Create an Instance |
-| | `instance remove <name> [--confirm <name>]` | Take a final Backup, then delete the Instance |
-| | `instance start\|stop\|restart <names>\|--all` | Start, stop or restart Instances |
-| | `instance logs <name> [-f] [--since <time>]` | Read an Instance's journal |
-| | `instance set-hostname <name> <host> [--cert <f> [--key <f>] \| --self-signed]` | Move an Instance to a new hostname |
-| | `instance reset-password <name>` | Reset the server password in Actual's own tool |
-| | `instance settings <name>` | Show an Instance's settings |
-| | `instance set <name> <key> <value> [--yes]` | Change one Instance setting |
-| | `instance unset <name> <key> [--yes]` | Return one Instance setting to Actual's default |
-| | `instance upgrade <names>\|--all [--to <v>] [--yes]` | Move Instances to a newer Release |
-| | `instance rollback <name> [--restore-data] [--yes] [--confirm <name>]` | Go back one step to the previous Release |
-| | `instance restore <name> [<archive>] [--confirm <name>]` | Restore an Instance from a Backup |
-| | `instance restore --from <archive>` | Rebuild an Instance from an archive on a new Host |
-| | `instance clone <source> <new> --hostname <host> [cert options] [--yes]` | Copy an Instance under a new name and hostname |
-| | `instance clone --from <archive> <new> --hostname <host> [cert options]` | Make a new Instance from an archive |
-| `backup` | `backup create <names>\|--all` | Take a `manual` Backup |
-| | `backup list [<names>]` | List archives |
-| | `backup prune [<names>\|--all] [--dry-run]` | Apply Retention by hand |
-| | `backup schedule <name> on\|off` | Switch scheduled Backups on or off for one Instance |
+|  | `instance show <name>` | One Instance in detail |
+|  | `instance create <name> --hostname <host> (--cert <f> --key <f> \| --self-signed) [--release <v>] [--yes]` | Create an Instance |
+|  | `instance remove <name> [--confirm <name>]` | Take a final Backup, then delete the Instance |
+|  | `instance start <names>\|--all` | Start Instances |
+|  | `instance stop <names>\|--all` | Stop Instances |
+|  | `instance restart <names>\|--all` | Restart Instances |
+|  | `instance logs <name> [-f] [--since <time>]` | Read an Instance's journal |
+|  | `instance set-hostname <name> <host> [--cert <f> [--key <f>] \| --self-signed]` | Move an Instance to a new hostname |
+|  | `instance reset-password <name>` | Reset the server password in Actual's own tool |
+|  | `instance settings <name>` | Show an Instance's settings |
+|  | `instance set <name> <key> <value> [--yes]` | Change one Instance setting |
+|  | `instance unset <name> <key> [--yes]` | Return one Instance setting to Actual's default |
+|  | `instance upgrade <names>\|--all [--to <v>] [--yes]` | Move Instances to a newer Release |
+|  | `instance rollback <name> [--restore-data] [--yes] [--confirm <name>]` | Go back one step to the previous Release |
+|  | `instance restore <name> [<archive>] [--confirm <name>] \| restore --from <archive>` | Restore an Instance from a Backup, or rebuild one from an archive |
+|  | `instance clone <source> <new> --hostname <host> [cert options] [--yes] \| clone --from <archive> <new> ...` | Copy an Instance, or make a new one from an archive |
+| `backup` | `backup create <names>\|--all` | Take a manual Backup |
+|  | `backup list [<names>]` | List archives |
+|  | `backup prune [<names>\|--all] [--dry-run]` | Apply Retention by hand |
+|  | `backup schedule <name> on\|off` | Switch scheduled Backups on or off for one Instance |
 | `cert` | `cert test [<names>\|--all]` | Check what each hostname serves |
-| | `cert update <names>\|--all --cert <f> [--key <f>]` | Swap in a new certificate |
+|  | `cert update <names>\|--all --cert <f> [--key <f>]` | Swap in a new certificate |
 | `release` | `release list` | Installed Releases, their Node runtime and the Instances on them |
-| | `release install <v>` | Install a Release |
-| | `release prune [--yes]` | Remove Releases no Instance uses, and unused Node runtimes |
-| | `release update-node [--yes]` | Install a Node patch and restart the Instances on it |
+|  | `release install <v>` | Install a Release |
+|  | `release prune [--yes]` | Remove Releases no Instance uses, and unused Node runtimes |
+|  | `release update-node [--yes]` | Install a Node patch and restart the Instances on it |
 | `self` | `self update [--to <ver>] [--yes]` | Update DCABSM itself |
-| | `self version` | Print the installed version. `dcabsm --version` does the same |
+|  | `self version` | Print the installed version. dcabsm --version does the same |
 
 `dcabsm help` prints this list. `host nightly` also exists: the `dcabsm-nightly` service runs it, and `help` doesn't list it.
 
@@ -111,7 +111,7 @@ If the Host later runs an OS that is not supported, only `host setup` refuses. E
 Commands that take `<names>|--all` take one or more Instance names, or `--all` for every Instance. With neither, they refuse:
 
 ```
-error: Name one or more Instances, or use --all.
+error: Give at least one Instance name, or --all.
   Example: sudo dcabsm instance upgrade family test
 ```
 
@@ -225,8 +225,9 @@ Prepares the Host: installs Nginx, `openssl` and `xz-utils`, creates `/etc/dcabs
 ```
 Setup checks (nothing changes yet)
   ✓ Debian 13 (trixie), amd64, VM
-  ✓ Not the Proxmox VE host, not a container
-  ✓ Nginx: apt's candidate is Debian's 1.26.3
+  ✓ Not the Proxmox VE host
+  ✓ Not a container
+  ✓ Nginx: apt's candidate is the distro's 1.26.3
   ✓ Nothing else listening on 80 or 443
 
 Plan
@@ -234,14 +235,17 @@ Plan
   · Create /etc/dcabsm and /srv/dcabsm
   · Backups in /srv/dcabsm/backups
   · Write dcabsm@.service, dcabsm-nightly.timer (03:30), Nginx conf.d files
-  · Install Actual 26.11.1 with its Node runtime
+  · Install Release 26.11.1 with its Node runtime
 Go ahead? [y/N] y
   ✓ apt: nginx, openssl, xz-utils
-  ✓ Created /etc/dcabsm/dcabsm.json (layout 3) and /srv/dcabsm
-  ✓ Units written; dcabsm-nightly.timer enabled
+  ✓ Created /etc/dcabsm and /srv/dcabsm
+  ✓ Created /etc/dcabsm/dcabsm.json
   ✓ Nginx: nginx -t passed, started, enabled
+  ✓ Wrote dcabsm@.service, dcabsm-nightly.service, dcabsm-nightly.timer, dcabsm.conf, dcabsm-default.conf
+  ✓ dcabsm-nightly.timer enabled
+  ✓ Nginx: nginx -t passed, reloaded
   ✓ Installed Node runtime 24.11.2 (checked with gpgv against nodejs.org's keys)
-  ✓ Installed Release 26.11.1 with npm --ignore-scripts, tied to Node 24.11.2
+  ✓ Installed Release 26.11.1 with npm --ignore-scripts, tied to Node runtime 24.11.2
   ✓ Native modules load: bcrypt, argon2, better-sqlite3
 
 Next: sudo dcabsm instance create <name> --hostname <host> --cert <file> --key <file>
@@ -274,7 +278,7 @@ Read-only. Takes no lock.
   ✓ Ownership and modes
   ✓ Releases 26.10.0, 26.11.0 load native modules
   · Node 24.11.2 is available (runtimes on 24.11.1)
-  ! Leftover .installing-26.11.1 folder  (host doctor --fix)
+  ! Leftover .installing-26.11.1 folder in /srv/dcabsm/releases  (host doctor --fix)
   ! Backups share a disk with Instance data (/dev/vda1)
   ! Firewall active without 443 allowed: manual System Admin task, e.g. ufw allow 443/tcp
   ✓ family: config, vhost, ownership, port, certificate 212 days
@@ -364,7 +368,7 @@ test      failed   Not enough space in /srv/dcabsm/backups for a backup of test 
   ✗ 1 backed up, 1 skipped (no data or schedule off), 1 failed
 ```
 
-Read the summary with `journalctl -u dcabsm-nightly` (add `-b` for this boot or `--since yesterday`). Look for the `Summary` block and the `✗` lines; the result is also one `dcabsm: host nightly: ok` or `failed` line under `journalctl -t dcabsm`. A failing schedule also shows in `instance list`, which warns when an Instance with scheduled Backups on has no `scheduled` archive newer than 48 hours.
+Read the summary with `journalctl -u dcabsm-nightly` (add `-b` for this boot or `--since yesterday`). Look for the `Summary` block and the `✗` lines; the result is also one `dcabsm: host nightly: ok` or `failed` line under `journalctl -t dcabsm`. A failing schedule also shows in `instance list`, which warns when an Instance with scheduled Backups on has no `scheduled` archive newer than 48 hours. An Instance created less than 48 hours ago is not flagged.
 
 ## instance
 
@@ -386,7 +390,7 @@ DCABSM 1.2.0 · Nightly run 03:30 · last check 2026-11-07 12:00 UTC
 ```
 
 - An Instance with an unfinished Release change shows `CHANGING` as its state. `start` and `restart` refuse it and point to `instance rollback`; `stop` still works. Below the table a warning names the operation, its Releases and the `instance rollback` command.
-- LAST SCHEDULED shows `off` when scheduled Backups are off, and `none` when there are none. It warns when an Instance with scheduled Backups on has none newer than 48 hours.
+- LAST SCHEDULED shows `off` when scheduled Backups are off, and `none` when there are none. It warns when an Instance with scheduled Backups on has none newer than 48 hours, unless the Instance is itself younger than 48 hours.
 - The Unsupported Host mark is always shown.
 - With no Instances, it points to `instance create`.
 

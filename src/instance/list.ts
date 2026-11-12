@@ -61,11 +61,17 @@ export interface InstanceRow {
 
 const OVERDUE_MS = 48 * 60 * 60 * 1000;
 
+/** Younger than 48 hours by its recorded creation time: no Nightly run is due yet. Unknown age is not young. */
+function isYoung(ctx: Context, record: InstanceRecord): boolean {
+  const created = Date.parse(record.createdAt ?? "");
+  return !Number.isNaN(created) && ctx.now().getTime() - created < OVERDUE_MS;
+}
+
 /** The LAST SCHEDULED column (docs/cli.md) and whether the schedule looks broken. */
 export async function scheduleOf(ctx: Context, name: string, record: InstanceRecord) {
   if (!record.scheduledBackups) return { lastScheduled: "off", overdue: false };
   const newest = (await listArchives(ctx, name)).filter((a) => a.kind === "scheduled").at(-1);
-  if (!newest) return { lastScheduled: "none", overdue: true };
+  if (!newest) return { lastScheduled: "none", overdue: !isYoung(ctx, record) };
   const s = newest.stamp;
   return {
     lastScheduled: `${s.slice(4, 6)}-${s.slice(6, 8)} ${s.slice(9, 11)}:${s.slice(11, 13)} UTC`,
