@@ -62,7 +62,7 @@ export interface InstanceRow {
 const OVERDUE_MS = 48 * 60 * 60 * 1000;
 
 /** The LAST SCHEDULED column (docs/cli.md) and whether the schedule looks broken. */
-async function scheduleOf(ctx: Context, name: string, record: InstanceRecord) {
+export async function scheduleOf(ctx: Context, name: string, record: InstanceRecord) {
   if (!record.scheduledBackups) return { lastScheduled: "off", overdue: false };
   const newest = (await listArchives(ctx, name)).filter((a) => a.kind === "scheduled").at(-1);
   if (!newest) return { lastScheduled: "none", overdue: true };
@@ -85,6 +85,33 @@ export async function unitStateOf(ctx: Context, name: string): Promise<InstanceS
   const state = res.stdout.trim();
   if (state === "" || state === "inactive") return "stopped";
   return UNIT_STATES.includes(state) ? (state as InstanceState) : "unknown";
+}
+
+/** When the Instance's unit last became active, or undefined if it is not running or systemd won't say. */
+export async function startedAt(ctx: Context, name: string): Promise<Date | undefined> {
+  const res = await ctx.runner.run("systemctl", [
+    "show",
+    "--timestamp=utc",
+    "-p",
+    "ActiveEnterTimestamp",
+    "--value",
+    unitName(name),
+  ]);
+  const m = /(\d{4}-\d\d-\d\d) (\d\d:\d\d:\d\d)/.exec(res.stdout);
+  return m ? new Date(`${m[1]}T${m[2]}Z`) : undefined;
+}
+
+/** The unit's main process id, or undefined when it has none. */
+export async function mainPid(ctx: Context, name: string): Promise<number | undefined> {
+  const res = await ctx.runner.run("systemctl", [
+    "show",
+    "-p",
+    "MainPID",
+    "--value",
+    unitName(name),
+  ]);
+  const pid = Number(res.stdout.trim());
+  return Number.isInteger(pid) && pid > 0 ? pid : undefined;
 }
 
 async function releaseOf(ctx: Context, name: string): Promise<string> {

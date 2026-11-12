@@ -2,6 +2,8 @@ import type { Context } from "../context.ts";
 import { firstLine } from "../errors.ts";
 import { exists } from "../fsutil.ts";
 import { changeChecks } from "./changes.ts";
+import { instanceChecks } from "../instance/doctor.ts";
+import { releaseChecks } from "../release/doctor.ts";
 import { certChecks } from "../certs/doctor.ts";
 import { healthChecks } from "./health.ts";
 import { detectOs, supportedNames } from "./os.ts";
@@ -20,7 +22,8 @@ export type Severity = "note" | "warn" | "fail";
 export interface Fix {
   /** Lines shown before asking, such as the diff of an owned file. */
   diff?: string[];
-  apply(): Promise<void>;
+  /** `yes` is `--yes`: it answers any question the fix itself asks, such as whether to restart. */
+  apply(opts: { yes: boolean }): Promise<void>;
 }
 
 export type CheckResult =
@@ -140,19 +143,19 @@ async function nginxOrgCheck(ctx: Context): Promise<CheckResult> {
   };
 }
 
-interface Listener {
+export interface Listener {
   port: number;
   process: string | undefined;
   pid: number | undefined;
 }
 
-/** Parses `ss -H -ltnp`, keeping the listeners on ports 80 and 443. */
-export function parseListeners(output: string): Listener[] {
+/** Parses `ss -H -ltnp`, keeping the listeners on `ports` (80 and 443 by default). */
+export function parseListeners(output: string, ports: readonly number[] = [80, 443]): Listener[] {
   const found: Listener[] = [];
   for (const line of output.split("\n")) {
     const fields = line.trim().split(/\s+/);
     const port = Number(/:(\d+)$/.exec(fields[3] ?? "")?.[1]);
-    if (port !== 80 && port !== 443) continue;
+    if (!ports.includes(port)) continue;
     const who = /\(\("([^"]+)",pid=(\d+)/.exec(line);
     found.push({
       port,
@@ -240,7 +243,9 @@ export const hostChecks: Check[] = [
   refusing("nginx-config", nginxConfigCheck),
   ...healthChecks,
   ...treeChecks,
+  ...releaseChecks,
   ...certChecks,
+  ...instanceChecks,
   ...changeChecks,
 ];
 
