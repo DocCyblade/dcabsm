@@ -134,11 +134,11 @@ expect_in "✓ Every Instance's port is its own"
 case "$out" in *"✗ alpha"* | *"! alpha: restart"* | *"! alpha: config"* | *"! alpha: vhost"*) fail "doctor reported a problem with a healthy alpha" ;; esac
 
 step "Doctor --fix repairs a vhost.conf edited by hand"
-echo "# edited by hand" >> /srv/dcabsm/instances/alpha/nginx/vhost.conf
+echo "# journey tamper" >> /srv/dcabsm/instances/alpha/nginx/vhost.conf
 run dcabsm host doctor
 expect_in "alpha: vhost.conf differs"
 run dcabsm host doctor --fix --yes
-grep -q "edited by hand" /srv/dcabsm/instances/alpha/nginx/vhost.conf && fail "doctor --fix did not repair vhost.conf"
+grep -q "journey tamper" /srv/dcabsm/instances/alpha/nginx/vhost.conf && fail "doctor --fix did not repair vhost.conf"
 nginx -t || fail "nginx -t fails after doctor --fix"
 up alpha.test || fail "alpha is not served after doctor --fix"
 
