@@ -144,7 +144,9 @@ async function configCheck(ctx: Context, target: Target): Promise<CheckResult[]>
       },
     ];
   }
-  if ((await stat(path)).mtime > started) {
+  // systemd reports whole seconds and a file's mtime has milliseconds, so compare whole seconds:
+  // an Instance created and started in one second isn't a false alarm.
+  if (Math.floor((await stat(path)).mtimeMs / 1000) > Math.floor(started.getTime() / 1000)) {
     return [
       {
         kind: "problem",

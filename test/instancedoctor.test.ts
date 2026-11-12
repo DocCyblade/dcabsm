@@ -476,6 +476,17 @@ describe("a restart that is needed after config.json changed", () => {
   });
 });
 
+describe("a unit that started in the same second config.json was written", () => {
+  it("is not reported: systemd's start time has whole seconds, a file's mtime has milliseconds", async () => {
+    await familyHost();
+    host.started[UNIT] = "Thu 2026-01-01 00:00:00 UTC";
+    const written = new Date("2026-01-01T00:00:00.700Z");
+    await utimes(dir("config", "config.json"), written, written);
+    expect(await doctor()).toBe(0);
+    expect(text()).not.toContain("restart needed");
+  });
+});
+
 describe("a unit start time that cannot be read", () => {
   it("warns that it could not measure, instead of staying silent", async () => {
     await familyHost();
