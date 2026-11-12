@@ -52,6 +52,15 @@ DCABSM is TypeScript on Node 24, bundled by esbuild into one JS file. It has no 
 
 `--live` skips the mirror and the signing key. The tarball is unpacked where `install.sh` would put it, and setup installs the newest Release and Node from the live sources. Container runs are not evidence of support (spec 13.2).
 
+## VM journey
+
+`test/vm/run-journey.sh <debian-13|ubuntu-24.04|ubuntu-26.04|turnkey> [--vm NAME] [--install-sh] [--self-update-from <ver>]` runs the V1 journey on the lab VM for that OS (spec 13.4), one VM at a time, by hand, never in CI. It reads `~/.config/test-vms.env` (mode 600, outside the repo; `test/vm/test-vms.env.example` shows the keys with `.invalid` placeholders), rolls the VM back to its snapshot through the Proxmox API, copies the CI-built tarball, and runs one step per SSH call. With no VM for the OS it prints `skipped: no VM for <os>` and exits 0. TurnKey runs once per snapshot (`clean-core`, `clean-nodejs`). Output has addresses and lab details removed. It only rolls back, powers on and reads state; `pveAllowed` in `lab.ts` refuses every other Proxmox call.
+
+- `test/vm/lab.ts`: registry parsing, OS-to-VM selection, step planning, the guarded Proxmox rollback and output redaction. Unit tests are in `test/vmlab.test.ts`, with a faked Proxmox transport.
+- `test/vm/lab-cli.ts`: the thin command line the shell calls (`resolve`, `plan`, `rollback`, `redact`).
+- `test/vm/journey-remote.sh`: the steps that run on the VM, shaped like `test/container/journey.sh`.
+- The default install unpacks the unsigned CI tarball where `install.sh` would; `--install-sh` runs `install.sh --version` instead and needs a signed, published release. `--self-update-from` installs that published version with `install.sh`, then runs `self update` to the newest published one.
+
 ## Before the first release
 
 The `release guard` job fails a `v*` tag while any of this is undone:
