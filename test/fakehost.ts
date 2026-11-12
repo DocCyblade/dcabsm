@@ -34,6 +34,10 @@ export interface FakeHost {
   /** Units systemd says are active (`nginx`) or enabled (`nginx`, `dcabsm-nightly.timer`). */
   active: Set<string>;
   enabled: Set<string>;
+  /** Unit → when it last became active, as `systemctl show --timestamp=utc` prints it. Start and restart set it far ahead. */
+  started: Record<string, string>;
+  /** Unit → its MainPID. */
+  mainPid: Record<string, number>;
   /** `ufw status` output; empty when ufw is not installed. */
   ufw: string;
   /** The device `df` reports for the backup directory and for the Instance data. */
@@ -57,6 +61,8 @@ export function fakeHost(overrides: Partial<FakeHost> = {}): FakeHost {
     exe: {},
     active: new Set(["nginx"]),
     enabled: new Set(["nginx", "dcabsm-nightly.timer"]),
+    started: {},
+    mainPid: {},
     ufw: "",
     backupDevice: "/dev/vdb1",
     dataDevice: "/dev/vda1",
@@ -65,7 +71,17 @@ export function fakeHost(overrides: Partial<FakeHost> = {}): FakeHost {
     systemctl(args) {
       const unit = (args.filter((a) => !a.startsWith("--")).pop() ?? "").replace(/\.service$/, "");
       const yes = (set: Set<string>) => (set.has(unit) ? ok() : fail("", 3));
-      if (args[0] === "is-active") return yes(host.active);
+      if (args[0] === "is-active") {
+        return host.active.has(unit) ? ok("active\n") : fail("", 3, "inactive\n");
+      }
+      if (args[0] === "show") {
+        if (args.includes("MainPID")) return ok(`${host.mainPid[unit] ?? 0}\n`);
+        return ok(host.started[unit] ? `${host.started[unit]}\n` : "");
+      }
+      if (args[0] === "start" || args[0] === "restart") {
+        host.started[unit] = "Fri 2099-12-31 00:00:00 UTC";
+        host.active.add(unit);
+      }
       if (args[0] === "is-enabled") return yes(host.enabled);
       if (args[0] === "enable") host.enabled.add(unit);
       if (args[0] === "enable" && args.includes("--now")) host.active.add(unit);

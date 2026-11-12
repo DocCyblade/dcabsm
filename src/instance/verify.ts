@@ -10,7 +10,7 @@ const POLL_MS = 1000;
 
 const pause = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-async function getJson(ctx: Context, url: string): Promise<Record<string, any> | undefined> {
+export async function getJson(ctx: Context, url: string): Promise<Record<string, any> | undefined> {
   try {
     const res = await ctx.fetcher.fetch(url);
     if (res.status !== 200) return undefined;

@@ -22,7 +22,7 @@ import {
   planRelease,
 } from "../release/install.ts";
 import type { Invocation } from "../table.ts";
-import { writeConfigJson, writeVhost } from "./files.ts";
+import { instanceDirSpecs, writeConfigJson, writeVhost } from "./files.ts";
 import {
   accountOf,
   checkName,
@@ -165,28 +165,9 @@ export async function resolveRelease(ctx: Context, wanted: string | undefined): 
   return version;
 }
 
-interface DirSpec {
-  path: string;
-  mode: number;
-  /** `user:group` as `chown` takes it. */
-  owner: string;
-}
-
 /** Every Instance directory, with spec 2.2 ownership, before the first start. */
 export async function makeDirectories(ctx: Context, name: string): Promise<void> {
-  const dir = instanceDir(ctx, name);
-  const account = accountOf(name);
-  const rootGroup = `root:${account}`;
-  const owned = `${account}:${account}`;
-  const dirs: DirSpec[] = [
-    { path: dir, mode: 0o750, owner: rootGroup },
-    { path: join(dir, "config"), mode: 0o750, owner: rootGroup },
-    { path: join(dir, "data"), mode: 0o700, owner: owned },
-    { path: join(dir, "server-files"), mode: 0o700, owner: owned },
-    { path: join(dir, "user-files"), mode: 0o700, owner: owned },
-    { path: join(dir, "nginx"), mode: 0o700, owner: "root:root" },
-  ];
-  for (const { path, mode, owner } of dirs) {
+  for (const { path, mode, owner } of instanceDirSpecs(ctx, name)) {
     await ensureDir(path, mode);
     await runChecked(ctx, "chown", [owner, path]);
   }

@@ -49,7 +49,7 @@ async function fixProblems(ctx: Context, results: CheckResult[], yes?: boolean):
       else if (answer !== "f" && answer !== "fix") continue;
     }
     try {
-      await fix.apply();
+      await fix.apply({ yes: yes === true });
       step(ctx, "done", `Fixed: ${result.message}`);
       await logChange(ctx, "host doctor --fix", `fixed: ${result.message}`);
     } catch (err) {

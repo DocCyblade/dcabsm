@@ -62,7 +62,7 @@ export interface InstanceRow {
 const OVERDUE_MS = 48 * 60 * 60 * 1000;
 
 /** The LAST SCHEDULED column (docs/cli.md) and whether the schedule looks broken. */
-async function scheduleOf(ctx: Context, name: string, record: InstanceRecord) {
+export async function scheduleOf(ctx: Context, name: string, record: InstanceRecord) {
   if (!record.scheduledBackups) return { lastScheduled: "off", overdue: false };
   const newest = (await listArchives(ctx, name)).filter((a) => a.kind === "scheduled").at(-1);
   if (!newest) return { lastScheduled: "none", overdue: true };
