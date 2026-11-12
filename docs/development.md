@@ -50,6 +50,12 @@ DCABSM is TypeScript on Node 24, bundled by esbuild into one JS file. It has no 
 
 `scripts/remote-test.sh [<os>...] [--live] [--no-reset]` runs the same journey on a private Proxmox test VM instead of in CI: it rolls the VM back to its clean snapshot, copies the working tree over, builds the tarballs there and runs `run.sh` for each OS (all three by default). It reads the VM, its SSH alias and its API token from `~/.config/test-vms.env`, outside the repo; `TVM=<NAME>` picks another VM.
 
+### Parallel mode
+
+`test/container/run.sh --parallel <os>... [--live]` runs several OSes at once on one Docker host and prints a PASS/FAIL table. Sequential stays the default. Each OS writes its own log to `.cache/container-logs/<timestamp>/<os>.log` (`LOG_DIR` overrides it), and the waits are longer (`BOOT_WAIT`, `MIRROR_WAIT`, `JOURNEY_WAIT_SCALE`).
+
+The mirror must stay on port 443, because `install.sh` and `dcabsm` use the real `https://` URLs and the product is not changed for tests. So each parallel run gets its own Docker network, and the mirror binds only that network's gateway address. The container's `--add-host` points the mirror names at that address, so it sees the same names on 443 behind the same test CA. The journey steps are identical. The pins are fetched once before the runs start. Parallel runs are slower and share the Docker host: re-run any failing OS alone before believing the failure.
+
 `--live` skips the mirror and the signing key. The tarball is unpacked where `install.sh` would put it, and setup installs the newest Release and Node from the live sources. Container runs are not evidence of support (spec 13.2).
 
 ## VM journey
