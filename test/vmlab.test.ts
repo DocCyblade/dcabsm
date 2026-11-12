@@ -209,6 +209,21 @@ describe("Proxmox calls", () => {
   });
 });
 
+describe("the reboot step of run-journey.sh", () => {
+  const script = readFileSync(new URL("./vm/run-journey.sh", import.meta.url), "utf8");
+  const reboot = script.slice(script.indexOf('if [ "$step" = reboot ]'));
+
+  it("proves a reboot by a changed boot id, not by SSH answering", () => {
+    expect(reboot).toContain("/proc/sys/kernel/random/boot_id");
+    expect(reboot).toContain('"$after" != "$before"');
+    expect(reboot).toContain("boot id never changed");
+  });
+
+  it("does not swallow a failure with || true", () => {
+    expect(reboot.slice(0, reboot.indexOf("on_vm"))).not.toContain("|| true");
+  });
+});
+
 describe("output redaction", () => {
   it("hides IPv4 and IPv6 addresses", () => {
     const text = "inet 192.0.2.17/24 and 10.1.2.3, fe80::1ff:fe23:4567:890a, 2001:db8::1";

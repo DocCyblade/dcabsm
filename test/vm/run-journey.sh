@@ -58,6 +58,7 @@ remote="/var/tmp/dcabsm-journey"
 on_vm() {
   ssh "${sshopts[@]}" "$SSH_TARGET" "if [ \"\$(id -u)\" = 0 ]; then $*; else sudo -n $*; fi" 2>&1 | lab redact "$os" ${vm_args[@]+"${vm_args[@]}"}
 }
+vm_read() { ssh "${sshopts[@]}" "$SSH_TARGET" "$@" 2> /dev/null; }
 vm_quiet() { ssh "${sshopts[@]}" "$SSH_TARGET" "$@" > /dev/null 2>&1; }
 
 journey() { # journey <snapshot> <self-update|main>
@@ -72,11 +73,18 @@ journey() { # journey <snapshot> <self-update|main>
     echo
     echo "== $step"
     if [ "$step" = reboot ]; then
-      vm_quiet "systemctl reboot || sudo -n systemctl reboot" || true
+      # The VM only counts as rebooted when its boot id changes: SSH answering again proves nothing.
+      local before after=""
+      before=$(vm_read cat /proc/sys/kernel/random/boot_id) && [ -n "$before" ] || { echo "could not read the boot id before the reboot" >&2; return 1; }
+      # The connection usually drops as the VM goes down, so this command's own status says nothing.
+      if vm_quiet "systemctl reboot || sudo -n systemctl reboot"; then :; fi
       sleep 15
-      local up=""
-      for _ in $(seq 1 90); do vm_quiet true && { up=1; break; }; sleep 2; done
-      [ -n "$up" ] || { echo "the VM did not come back after the reboot" >&2; return 1; }
+      for _ in $(seq 1 90); do
+        after=$(vm_read cat /proc/sys/kernel/random/boot_id) || after=""
+        [ -n "$after" ] && [ "$after" != "$before" ] && break
+        after=""; sleep 2
+      done
+      [ -n "$after" ] || { echo "the VM did not reboot (its boot id never changed)" >&2; return 1; }
     fi
     on_vm "env JOURNEY_VERSION=$version JOURNEY_STAGE=$remote JOURNEY_ARCH=amd64 JOURNEY_INSTALL=$install_mode JOURNEY_PREV=$prev bash $remote/journey-remote.sh $step" || return 1
   done
