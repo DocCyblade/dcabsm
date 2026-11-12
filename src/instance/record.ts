@@ -16,6 +16,8 @@ export interface InstanceRecord {
   port: number;
   hostname: string;
   scheduledBackups: boolean;
+  /** When `instance create` made it (ISO 8601). Absent on Instances made before it was recorded. */
+  createdAt?: string;
   /** Only what the System Admin set; nothing for a setting at its default (spec 4.11). */
   settings?: Record<string, number | boolean | string>;
 }

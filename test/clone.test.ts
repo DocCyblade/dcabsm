@@ -35,6 +35,7 @@ describe("instance clone from a source", () => {
       port: 15128,
       hostname: "try.example.org",
       scheduledBackups: true,
+      createdAt: expect.any(String),
       settings: { "upload-limit-mb": 60 },
     });
     const config = JSON.parse(await readFile(t.inst("shop-test", "config", "config.json"), "utf8"));
