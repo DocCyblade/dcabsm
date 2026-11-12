@@ -1,8 +1,9 @@
 import { readdir, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import type { Context } from "../context.ts";
-import { CliError, refusal } from "../errors.ts";
+import { CliError, firstLine, refusal } from "../errors.ts";
 import { DEFAULT_BACKUP_DIR, readHostConfig } from "../host/config.ts";
+import { formatSize } from "../host/tree.ts";
 
 /** The archive format this DCABSM writes (spec 7.1). Older formats are read for good. */
 export const ARCHIVE_FORMAT = 1;
@@ -47,12 +48,16 @@ export async function backupPath(ctx: Context, name: string, file: string): Prom
   return join(await backupRoot(ctx), name, file);
 }
 
-/** Refuses a path that is not a file: the check for an archive given on the command line. */
-export async function requireArchiveFile(archive: string): Promise<void> {
+/**
+ * Refuses a path that is not a file: the check for an archive given on the command line. Returns the
+ * absolute path to hand to tar, since GNU tar reads `host:file` as a file on another machine.
+ */
+export async function requireArchiveFile(archive: string): Promise<string> {
   const found = await stat(archive).catch(() => undefined);
   if (!found?.isFile()) {
     throw refusal(`${archive} is not an archive file.`, "Give the path of a .tar.gz archive.");
   }
+  return resolve(archive);
 }
 
 /** `20261107T141200Z` */
@@ -111,8 +116,77 @@ export async function listArchives(ctx: Context, name: string): Promise<ArchiveI
   return found.sort((a, b) => a.stamp.localeCompare(b.stamp));
 }
 
-/** Reads and checks `manifest.json` from an archive. Refuses a newer format (spec 7.1). */
+/** Free bytes where `path` lives, from `df -Pk`. */
+export async function freeBytes(ctx: Context, path: string): Promise<number> {
+  const res = await ctx.runner.run("df", ["-Pk", path]);
+  const kb = Number(res.stdout.split("\n")[1]?.trim().split(/\s+/)[3]);
+  if (res.code !== 0 || !Number.isFinite(kb)) {
+    throw new CliError(
+      `Could not read the free space in ${path}.`,
+      "Check the disk, then run again",
+    );
+  }
+  return kb * 1024;
+}
+
+/**
+ * Refuses an archive that holds anything but plain files and directories, or a name that is absolute
+ * or climbs with `..`. Our own archives hold nothing else, and tar runs as root when it extracts, so a
+ * symlink, hard link, device node, pipe or setuid file in an archive from elsewhere is an attack, not data.
+ */
+export async function vetArchive(ctx: Context, archive: string): Promise<void> {
+  const names = await ctx.runner.run("tar", ["-tzf", archive]);
+  const kinds = await ctx.runner.run("tar", ["-tvzf", archive]);
+  if (names.code !== 0 || kinds.code !== 0) {
+    throw new CliError(
+      `tar could not read ${archive}: ${firstLine(names.stderr || kinds.stderr, "not a readable archive")}`,
+    );
+  }
+  const nameLines = names.stdout.split("\n").filter((l) => l !== "");
+  const kindLines = kinds.stdout.split("\n").filter((l) => l !== "");
+  const unsafe = (why: string, name: string) =>
+    new CliError(
+      `${archive} holds an unsafe entry (${why}): ${JSON.stringify(name)}.`,
+      "A DCABSM archive holds only files and directories. Do not restore an archive you do not trust.",
+    );
+  if (nameLines.length !== kindLines.length) throw unsafe("odd entry names", archive);
+  // `tar -tv` lines read `-rwxr-xr-x user/group 1234 date time name`: the first character is the
+  // entry type, the first ten are type plus permissions, and the third field is the size.
+  const TYPE_AT = 0;
+  const MODE_LENGTH = 10;
+  const SIZE_FIELD = 2;
+  const USER_EXEC_AT = 3;
+  const GROUP_EXEC_AT = 6;
+  let unpacked = 0;
+  nameLines.forEach((name, i) => {
+    const line = kindLines[i]!;
+    unpacked += Number(line.trim().split(/\s+/)[SIZE_FIELD]) || 0;
+    const kind = line[TYPE_AT];
+    if (kind !== "-" && kind !== "d") throw unsafe(`type ${kind}, not a file or directory`, name);
+    const perms = line.slice(0, MODE_LENGTH);
+    if (/[sS]/.test(perms[USER_EXEC_AT]! + perms[GROUP_EXEC_AT]!)) {
+      throw unsafe("setuid or setgid bit", name);
+    }
+    if (name.startsWith("/") || name.split("/").includes("..")) {
+      throw unsafe("path leaves the archive", name);
+    }
+  });
+  // The listing gives the unpacked size, so a decompression bomb is refused before it fills the disk.
+  const free = await freeBytes(ctx, ctx.paths.instances);
+  if (unpacked > free) {
+    throw new CliError(
+      `${archive} unpacks to ${formatSize(unpacked)}, more than the ${formatSize(free)} free for Instances.`,
+      "Free some disk space, then run again.",
+    );
+  }
+}
+
+/**
+ * Reads and checks `manifest.json` from an archive. Refuses a newer format (spec 7.1). It also
+ * vets the archive, so every restore or clone from a given archive stops here before it changes anything.
+ */
 export async function readManifest(ctx: Context, archive: string): Promise<Manifest> {
+  await vetArchive(ctx, archive);
   const res = await ctx.runner.run("tar", ["-xzOf", archive, "manifest.json"]);
   let manifest: Partial<Manifest> | undefined;
   try {

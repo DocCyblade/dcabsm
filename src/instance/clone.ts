@@ -141,8 +141,7 @@ export async function instanceClone({ ctx, args }: Invocation): Promise<void> {
     await confirmOrCancel(ctx, "Continue?", { yes: req.yes });
     archive = await backupPath(ctx, source, await takeBackup(ctx, source, "pre-clone"));
   } else {
-    archive = req.archive!;
-    await requireArchiveFile(archive);
+    archive = await requireArchiveFile(req.archive!);
     label = basename(archive);
     ctx.io.out(`Clone from ${label} → ${name}`);
   }
@@ -157,7 +156,12 @@ export async function instanceClone({ ctx, args }: Invocation): Promise<void> {
     });
     const plan = await planIfMissing(ctx, manifest.release);
     if (plan) await installRelease(ctx, plan);
-    const record = { ...stage.record, port: await freePort(ctx), hostname };
+    const record = {
+      ...stage.record,
+      port: await freePort(ctx),
+      hostname,
+      createdAt: ctx.now().toISOString(),
+    };
     await buildInstance(ctx, {
       name,
       stage,

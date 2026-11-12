@@ -25,6 +25,16 @@ const exists = (p: string) =>
     () => false,
   );
 
+describe("unpacking as root", () => {
+  it("never keeps the owner a tarball names, since that uid may be a local user's", async () => {
+    await start();
+    expect(await install("26.11.0")).toBe(0);
+    const untars = h.calls.filter((c) => c.command === "tar" && c.args[0] === "-xJf");
+    expect(untars.length).toBeGreaterThan(0);
+    for (const c of untars) expect(c.args).toContain("--no-same-owner");
+  });
+});
+
 describe("which versions are accepted", () => {
   it.each(["26.11.0-beta.1", "v26.11.0", "26.11", "26.11.0+x", "latest"])(
     "refuses %j as not stable, before touching the network",
@@ -189,9 +199,21 @@ describe("the npm install", () => {
   it("checks all three native modules", async () => {
     await start();
     await install("26.11.0");
-    const check = h.calls.find((c) => c.args[0] === "-e")!;
-    for (const m of ["bcrypt", "argon2", "better-sqlite3"]) expect(check.args[1]).toContain(m);
-    expect(check.command).toBe(join(h.ctx.paths.node, "24.11.1", "bin", "node"));
+    const check = h.calls.find((c) => c.command === "setpriv")!;
+    const at = check.args.indexOf("-e");
+    for (const m of ["bcrypt", "argon2", "better-sqlite3"]) expect(check.args[at + 1]).toContain(m);
+    expect(check.args[at - 1]).toBe(join(h.ctx.paths.node, "24.11.1", "bin", "node"));
+  });
+
+  it("runs the native module check as an unprivileged user, never as root", async () => {
+    await start();
+    await install("26.11.0");
+    const check = h.calls.find((c) => c.command === "setpriv")!;
+    expect(check.args).toEqual(
+      expect.arrayContaining(["--reuid=65534", "--regid=65534", "--clear-groups"]),
+    );
+    // Nothing else runs the Release's Node with -e.
+    expect(h.calls.filter((c) => c.args.includes("-e") && c.command !== "setpriv")).toEqual([]);
   });
 
   it("clears a leftover .installing directory from a crashed run", async () => {

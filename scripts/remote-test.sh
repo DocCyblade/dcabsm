@@ -4,9 +4,10 @@
 # there and runs test/container/run.sh. The VM comes from the registry ~/.config/test-vms.env;
 # no host, address or token lives in this repo.
 #
-#   scripts/remote-test.sh [<debian-13|ubuntu-24.04|ubuntu-26.04>...] [--live] [--no-reset]
+#   scripts/remote-test.sh [<debian-13|ubuntu-24.04|ubuntu-26.04>...] [--live] [--no-reset] [--parallel]
 #
-# With no OS, all three run. Set TVM=<NAME> to use another registered VM (default CI01).
+# With no OS, all three run, one after another. --parallel runs them at once, on the VM, with
+# test/container/run.sh --parallel (longer waits; logs stay on the VM). Set TVM=<NAME> to use another registered VM (default CI01).
 set -euo pipefail
 
 registry="${TVM_REGISTRY:-$HOME/.config/test-vms.env}"
@@ -21,10 +22,11 @@ pve_key=$(get PVE); url_var="PVE_${pve_key}_URL"; url="${!url_var:-}"
 [ -n "$host" ] && [ -n "$node" ] && [ -n "$vmid" ] && [ -n "$snapshot" ] && [ -n "$url" ] \
   || { echo "VM $vm is not fully described in $registry" >&2; exit 2; }
 
-oses=(); live=""; reset=1
+oses=(); live=""; reset=1; parallel=0
 for arg in "$@"; do
   case "$arg" in
     --live) live="--live" ;;
+    --parallel) parallel=1 ;;
     --no-reset) reset=0 ;;
     debian-13 | ubuntu-24.04 | ubuntu-26.04) oses+=("$arg") ;;
     *) echo "unknown argument: $arg" >&2; exit 2 ;;
@@ -66,6 +68,11 @@ echo "== building the tarballs"
 ssh "$host" 'cd dcabsm && npm ci --no-audit --no-fund && npm run build && npm run package'
 
 status=0
+if [ "$parallel" = 1 ]; then
+  echo "== container journeys in parallel: ${oses[*]} ${live:-pinned}"
+  ssh -tt "$host" "cd dcabsm && test/container/run.sh --parallel ${oses[*]} $live" || status=$?
+  exit "$status"
+fi
 for os in "${oses[@]}"; do
   echo "== container journey: $os ${live:-pinned}"
   ssh -tt "$host" "cd dcabsm && test/container/run.sh $os $live" || { status=$?; echo "FAILED: $os" >&2; }

@@ -1,5 +1,7 @@
 # Each Release carries its own Node
 
+Status: Accepted
+
 DCABSM installs Node itself from official nodejs.org tarballs into `/srv/dcabsm/node/<version>/`, verified against `SHASUMS256.txt` and its signature, with one `node/<major>` symlink per major pointing at its newest patch. When a Release is installed it is linked to the newest LTS major that satisfies Actual's `engines.node`, and that link never changes. An Instance runs the Node of its Release. We chose this over one Host-wide Node from NodeSource because a Host-wide Node forces every Instance onto a new major the moment one Release needs it, which defeats test Instances.
 
 ## Considered options

@@ -16,6 +16,8 @@ export interface InstanceRecord {
   port: number;
   hostname: string;
   scheduledBackups: boolean;
+  /** When `instance create` made it (ISO 8601). Absent on Instances made before it was recorded. */
+  createdAt?: string;
   /** Only what the System Admin set; nothing for a setting at its default (spec 4.11). */
   settings?: Record<string, number | boolean | string>;
 }
@@ -82,6 +84,7 @@ export function checkName(name: string): void {
 
 /** The Instance's record, or a refusal that points to `instance list`. */
 export async function requireInstance(ctx: Context, name: string): Promise<InstanceRecord> {
+  checkName(name);
   const record = (await exists(instanceDir(ctx, name))) ? await readRecord(ctx, name) : undefined;
   if (!record) {
     throw refusal(`There is no Instance named ${name}.`, "See the list: dcabsm instance list");

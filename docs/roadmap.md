@@ -5,7 +5,7 @@ Work deliberately left out of V1, which might come later. Nothing here is promis
 ## Hosts
 
 - **LXC on Proxmox as a Host.** V1 refuses every container (spec 10.3), because the Instance sandbox and the systemd design break in an unprivileged container. TurnKey's LXC templates come with this.
-- **arm64 fully supported.** arm64 is built and CI-tested in V1. It becomes fully supported once an arm64 VM passes the OS gate (spec 13.6).
+- **arm64 fully supported.** arm64 is built in V1, and its unit tests run in CI, but it has not been run on a real Host. It becomes fully supported once an arm64 VM passes the OS gate (spec 13.6).
 - **nginx.org's Nginx package.** V1 refuses it unless an override marks the Host as an Unsupported Host (spec 10.4). It would very likely work, since DCABSM only writes to `conf.d`, but supporting it means testing a second Nginx version on every OS.
 - **Adopting an existing Actual install**, so a server already running Actual can move under DCABSM.
 
@@ -43,3 +43,11 @@ V1 exposes six Actual settings (spec 4.11). Candidates for later:
 - **zsh and fish Tab completion**, only if asked for. V1 ships bash completion (spec 9.1).
 - **An uninstall command.** In V1, removing DCABSM is a Manual System Admin task described in the README (spec 11.5).
 - **Reproducible builds**, so a compromised CI run can't produce a tarball that the author then signs ([ADR-0003](adr/0003-signed-tarball-with-its-own-node.md)).
+
+## Review follow-ups
+
+Small items from the Wave 8 security review that are not V1 behaviour:
+
+- **Release gate (issue #43): check the `install.sh` fingerprint.** `install.sh` prints a fingerprint written into the script. The release process should fail the build when it differs from the fingerprint of the embedded keyring.
+- **Whole-codebase review (issue #44): look closer at `release prune`, `instance remove` and `host/updates.ts`.** The Wave 8 review checked that their runner calls pass arguments without a shell and use validated names, and did not review their logic in depth.
+- **The Instance unit keeps its current hardening.** `MemoryDenyWriteExecute` is incompatible with Node's JIT, and `IPAddressDeny` would break the proxying and sync. Revisit only if DCABSM gains an egress policy.

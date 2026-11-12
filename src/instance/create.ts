@@ -286,6 +286,7 @@ export async function instanceCreate({ ctx, args }: Invocation): Promise<void> {
     port: await freePort(ctx),
     hostname: req.hostname,
     scheduledBackups: true,
+    createdAt: ctx.now().toISOString(),
   };
   await createFiles(ctx, req, source, record, release);
   await startAndVerify(ctx, req.name, record, release);

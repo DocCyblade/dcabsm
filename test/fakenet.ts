@@ -70,6 +70,8 @@ interface FakeArchive {
   /** Every directory and file under the members, so extracting can bring them back. */
   dirs?: string[];
   files?: Record<string, string>;
+  /** Extra members a hostile archive would hold, as `tar -tv` shows them: `l` for a link, `p` for a pipe, and so on. */
+  extra?: Array<{ name: string; type: string; perms?: string; size?: number }>;
 }
 
 /** Records the tree under `dir/rel` into the archive. */
@@ -289,9 +291,25 @@ export function fakeNet(overrides: Partial<FakeNet> = {}): FakeNet {
           ? ok()
           : fail("tar: not found in archive");
       }
-      if (command === "tar" && args[0] === "-tzf") {
+      if (command === "tar" && (args[0] === "-tzf" || args[0] === "-tvzf")) {
         const archive = readFakeArchive(args[1]!);
-        return archive ? ok(archive.members.join("\n") + "\n") : fail("not a gzip file");
+        if (!archive) return fail("not a gzip file");
+        const entries = [
+          ...archive.members.map((name) => ({
+            name,
+            type: "-",
+            perms: undefined as string | undefined,
+            size: 0,
+          })),
+          ...(archive.extra ?? []),
+        ];
+        const verbose = args[0] === "-tvzf";
+        const lines = entries.map((e) =>
+          verbose
+            ? `${e.type}${e.perms ?? "rw-r--r--"} 0/0 ${e.size ?? 0} 2026-11-09 12:00 ${e.name}`
+            : e.name,
+        );
+        return ok(lines.join("\n") + "\n");
       }
       if (command === "tar" && args[0] === "-xzOf") {
         const archive = readFakeArchive(args[1]!);
@@ -318,8 +336,9 @@ export function fakeNet(overrides: Partial<FakeNet> = {}): FakeNet {
         writeFileSync(join(prefix, "package-lock.json"), "{}");
         return ok();
       }
-      if (command.endsWith("/bin/node") && args[0] === "-e") {
-        return net.nativeFails || net.brokenDirs.some((d) => args[2]!.startsWith(d))
+      if (command === "setpriv" && args[4] === "-e") {
+        // setpriv --reuid=… --regid=… --clear-groups <node> -e <code> <package.json>
+        return net.nativeFails || net.brokenDirs.some((d) => args[6]!.startsWith(d))
           ? { code: 1, stdout: "", stderr: "Error: Cannot find module 'better-sqlite3'" }
           : ok();
       }

@@ -45,7 +45,7 @@ expect_in() { # expect_in <text>: the last output has it
   case "$out" in *"$1"*) ;; *) fail "expected '$1' in the output above" ;; esac
 }
 wait_for() { # wait_for <seconds> <command...>
-  local limit="$1"
+  local limit=$(($1 * ${JOURNEY_WAIT_SCALE:-1}))
   shift
   for _ in $(seq 1 "$limit"); do
     "$@" > /dev/null 2>&1 && return 0
@@ -53,9 +53,10 @@ wait_for() { # wait_for <seconds> <command...>
   done
   fail "timed out waiting for: $*"
 }
-up() { curl -skf --max-time 5 --resolve "$1:443:127.0.0.1" "https://$1/health" | grep -q UP; }
+curl_max=$((5 * ${JOURNEY_WAIT_SCALE:-1})) # the same patience as wait_for, for a loaded parallel run
+up() { curl -skf --max-time "$curl_max" --resolve "$1:443:127.0.0.1" "https://$1/health" | grep -q UP; }
 down() { ! up "$1"; }
-info() { curl -skf --max-time 5 --resolve "$1:443:127.0.0.1" "https://$1/info"; }
+info() { curl -skf --max-time "$curl_max" --resolve "$1:443:127.0.0.1" "https://$1/info"; }
 
 echo "journey: $mode, dcabsm $version on $(. /etc/os-release && echo "$PRETTY_NAME") ($arch)"
 
@@ -118,7 +119,7 @@ else
   expect_ok dcabsm instance create alpha --hostname alpha.test --self-signed
 fi
 wait_for 30 up alpha.test
-run curl -sI --max-time 5 --resolve alpha.test:80:127.0.0.1 http://alpha.test/
+run curl -sI --max-time "$curl_max" --resolve alpha.test:80:127.0.0.1 http://alpha.test/
 expect_in "301"
 run info alpha.test
 expect_in "version"
@@ -130,8 +131,8 @@ expect_in "✓ Every Instance's config.json matches its record"
 expect_in "✓ Every Instance's vhost.conf matches"
 expect_in "✓ Instance accounts, ownership and modes"
 expect_in "✓ Every Instance's port is its own"
-# A brand-new Instance has no scheduled Backup yet, so that one warning is expected here.
-case "$out" in *"✗ alpha"* | *"! alpha: restart"* | *"! alpha: config"* | *"! alpha: vhost"*) fail "doctor reported a problem with a healthy alpha" ;; esac
+# A brand-new Instance is younger than 48 hours, so it gets no late-Backup warning either.
+case "$out" in *"✗ alpha"* | *"! alpha"*) fail "doctor reported a problem with a healthy alpha" ;; esac
 
 step "Doctor --fix repairs a vhost.conf edited by hand"
 echo "# journey tamper" >> /srv/dcabsm/instances/alpha/nginx/vhost.conf
@@ -167,7 +168,7 @@ wait_for 30 up beta.test
 run info beta.test
 expect_in "26.11.0"
 # The certificate beta serves is the one given, checked by a client that trusts only it.
-curl -sf --max-time 5 --cacert /root/beta.crt --resolve beta.test:443:127.0.0.1 https://beta.test/health | grep -q UP ||
+curl -sf --max-time "$curl_max" --cacert /root/beta.crt --resolve beta.test:443:127.0.0.1 https://beta.test/health | grep -q UP ||
   fail "beta does not serve the certificate it was given"
 run info alpha.test
 expect_in "26.10.0"
@@ -257,11 +258,11 @@ expect_in "alpha.test"
 openssl req -x509 -newkey rsa:2048 -nodes -days 3 -subj "/CN=beta.test" \
   -addext "subjectAltName=DNS:beta.test" -keyout /root/beta2.key -out /root/beta2.crt 2> /dev/null
 expect_ok dcabsm cert update beta --cert /root/beta2.crt --key /root/beta2.key
-curl -sf --max-time 5 --cacert /root/beta2.crt --resolve beta.test:443:127.0.0.1 https://beta.test/health | grep -q UP ||
+curl -sf --max-time "$curl_max" --cacert /root/beta2.crt --resolve beta.test:443:127.0.0.1 https://beta.test/health | grep -q UP ||
   fail "beta does not serve the updated certificate"
 # A certificate for another hostname is refused, and the one in place keeps serving.
 expect_refusal "" dcabsm cert update beta --cert /root/beta.crt --key /root/beta2.key
-curl -sf --max-time 5 --cacert /root/beta2.crt --resolve beta.test:443:127.0.0.1 https://beta.test/health | grep -q UP ||
+curl -sf --max-time "$curl_max" --cacert /root/beta2.crt --resolve beta.test:443:127.0.0.1 https://beta.test/health | grep -q UP ||
   fail "a refused update changed what beta serves"
 expect_ok dcabsm instance list
 expect_in "CERT"

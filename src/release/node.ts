@@ -144,6 +144,7 @@ export async function installPatch(ctx: Context, patch: string): Promise<void> {
       "-C",
       dest,
       "--strip-components=1",
+      "--no-same-owner",
     ]);
     if (untar.code !== 0) throw new CliError(`Could not unpack ${file}: ${untar.stderr.trim()}`);
     await rename(dest, join(ctx.paths.node, patch));

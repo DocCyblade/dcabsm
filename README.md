@@ -51,7 +51,7 @@ DCABSM is designed for a **fresh, dedicated Host**. Installing it on a server th
 | TurnKey Node.js 19.x (Debian 13) | amd64 | from the ISO |
 
 - **Tested on** amd64 virtual machines running each OS in the table.
-- **arm64** is built and tested in CI, but hasn't been tested on a real Host yet.
+- **arm64** is built, and its unit tests run in CI, but it has not been run on a real Host yet.
 - **Virtual machines and bare metal only.** Setup refuses containers (LXC, WSL, Docker, Podman) and the Proxmox VE host itself.
 - **Nginx** must be the distro's own `nginx` package. Setup installs it if it's missing. nginx.org's package isn't supported.
 - **Actual** Releases 26.10.0 and newer, stable versions from npm only.
@@ -72,6 +72,8 @@ Webmin, Postfix, TurnKey's firewall and the rest are left alone. Don't use Webmi
 ## Installing
 
 DCABSM is published as a signed tarball per architecture on this repo's GitHub Releases, with its own Node inside. It isn't on npm.
+
+You need root (or `sudo`), `curl`, `tar` and `gpgv` on the Host. A fresh Debian or Ubuntu usually has `tar` and `gpgv` but may lack `curl`: `sudo apt install curl`. The install script never installs packages. The by-hand steps below also need `gpg`, from the `gnupg` package.
 
 ### The signing key
 

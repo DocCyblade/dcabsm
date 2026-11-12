@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, readdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { acquireLock, withLock } from "../src/lock.ts";
@@ -60,5 +60,18 @@ describe("lock", () => {
       withLock(h.ctx, "dcabsm x", async () => Promise.reject(new Error("boom"))),
     ).rejects.toThrow("boom");
     expect(await exists(h.ctx.paths.lock)).toBe(false);
+  });
+
+  it("lets exactly one of several racing commands take a stale lock, leaving no stale file", async () => {
+    h = await harness();
+    await mkdir(dirname(h.ctx.paths.lock), { recursive: true });
+    await writeFile(h.ctx.paths.lock, JSON.stringify({ pid: 2 ** 30, command: "old" }));
+    const results = await Promise.allSettled(
+      [1, 2].map((n) => acquireLock(h.ctx, `dcabsm racer ${n}`)),
+    );
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    const left = (await readdir(dirname(h.ctx.paths.lock))).filter((f) => f.includes("stale"));
+    expect(left).toEqual([]);
+    expect(JSON.parse(await readFile(h.ctx.paths.lock, "utf8")).command).toMatch(/^dcabsm racer/);
   });
 });

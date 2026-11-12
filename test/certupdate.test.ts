@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { certUpdate } from "../src/certs/update.ts";
@@ -45,6 +45,20 @@ describe("cert update", () => {
     expect(t!.h.out.join("\n")).toContain("a: now serving the new certificate");
     expect(t!.h.out).toContain("  · Actual was not restarted.");
     expect(t!.h.calls.filter((c) => c.args.includes("restart"))).toEqual([]);
+  });
+
+  it("warns about a key file others can read, and stays quiet about a private one", async () => {
+    await setup();
+    chmodSync(file("new-key.pem"), 0o644);
+    await run("a", "--cert", file("new.pem"), "--key", file("new-key.pem"));
+    const out = t!.h.out.join("\n");
+    expect(out).toContain("! The key file");
+    expect(out).toContain("is readable by other users");
+    expect(out).toContain("chmod 600");
+    t!.h.out.length = 0;
+    chmodSync(file("new-key.pem"), 0o600);
+    await run("a", "--cert", file("new.pem"), "--key", file("new-key.pem"));
+    expect(t!.h.out.join("\n")).not.toContain("readable by other users");
   });
 
   it("covers every Instance with --all", async () => {

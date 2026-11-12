@@ -1,5 +1,7 @@
 # The filesystem is DCABSM's only record
 
+Status: Accepted
+
 DCABSM keeps no central registry or database. The Instance list is the contents of `/srv/dcabsm/instances/`, the Release list is the contents of `/srv/dcabsm/releases/`, and an Instance's Release is whatever its `release` symlink points to. A registry could disagree with what's on disk, and `doctor` would then have to work out which was right, so each fact lives in one place that can be checked with `ls`.
 
 ## Consequences

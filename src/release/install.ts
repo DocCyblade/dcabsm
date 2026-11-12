@@ -90,7 +90,17 @@ export async function releaseLoads(ctx: Context, dir: string, nodePath: string):
     "const m=require('node:module');const r=m.createRequire(process.argv[1]);" +
     `for(const n of ${JSON.stringify(NATIVE_MODULES)})r(n)`;
   const pkg = join(dir, "node_modules", ACTUAL_PACKAGE, "package.json");
-  const res = await ctx.runner.run(nodePath, ["-e", code, pkg]);
+  // The modules come from npm, so loading them must not run as root: drop to `nobody` (65534, as on
+  // Debian, Ubuntu and TurnKey) with no supplementary groups. The Release tree is world-readable.
+  const res = await ctx.runner.run("setpriv", [
+    "--reuid=65534",
+    "--regid=65534",
+    "--clear-groups",
+    nodePath,
+    "-e",
+    code,
+    pkg,
+  ]);
   return res.code === 0;
 }
 
