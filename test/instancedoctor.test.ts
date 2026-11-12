@@ -23,6 +23,8 @@ import { harness, type Harness, type HarnessOptions } from "./helpers.ts";
 let h: Harness;
 let host: FakeHost;
 let net: FakeNet;
+/** While true, the faked `df` fails, so free space cannot be read. */
+let dfFails = false;
 afterEach(() => h.cleanup());
 
 const HOSTNAME = "family.example.org";
@@ -36,6 +38,7 @@ const read = (path: string) => readFile(path, "utf8");
 async function familyHost(opts: HarnessOptions = {}): Promise<void> {
   host = fakeHost();
   net = fakeNet();
+  dfFails = false;
   h = await harness({
     setUp: false,
     net,
@@ -47,6 +50,7 @@ async function familyHost(opts: HarnessOptions = {}): Promise<void> {
         writeFileSync(args[args.indexOf("-out") + 1]!, made.cert);
         return { code: 0, stdout: "", stderr: "" };
       }
+      if (command === "df" && dfFails) return { code: 1, stdout: "", stderr: "df: failed" };
       return host.run(command, args);
     },
   });
@@ -268,6 +272,18 @@ describe("the account and ownership", () => {
     );
   });
 
+  it("reports a missing certificate or key and points to cert update, with no fix", async () => {
+    await familyHost();
+    await rm(dir("nginx", "cert.pem"));
+    await rm(dir("nginx", "key.pem"));
+    // The certificate test fails too (exit 2); this check adds the warnings and the pointer.
+    expect(await doctor("--fix", "--yes")).toBe(2);
+    expect(text()).toContain("! family: /srv/dcabsm/instances/family/nginx/cert.pem is missing");
+    expect(text()).toContain("! family: /srv/dcabsm/instances/family/nginx/key.pem is missing");
+    expect(text()).toContain("sudo dcabsm cert update family");
+    await expect(lstat(dir("nginx", "cert.pem"))).rejects.toThrow();
+  });
+
   it("recreates a missing directory", async () => {
     await familyHost();
     await rm(dir("user-files"), { recursive: true });
@@ -391,6 +407,15 @@ describe("Backups", () => {
     expect(text()).toContain("the next Nightly run would not fit");
   });
 
+  it("warns that it could not measure when free space cannot be read", async () => {
+    await familyHost();
+    await scheduledOn();
+    await archive("20261109T033000Z");
+    dfFails = true;
+    expect(await doctor()).toBe(1);
+    expect(text()).toContain("! Couldn't measure the free space on the backup filesystem");
+  });
+
   it("counts only Instances with scheduled Backups on", async () => {
     await familyHost();
     await archive("20261109T033000Z", "manual", 100 * 1024);
@@ -448,5 +473,14 @@ describe("a restart that is needed after config.json changed", () => {
     expect(await run(["instance", "restart", "family"], h.ctx)).toBe(0);
     h.out.length = 0;
     expect(await doctor()).toBe(0);
+  });
+});
+
+describe("a unit start time that cannot be read", () => {
+  it("warns that it could not measure, instead of staying silent", async () => {
+    await familyHost();
+    host.started[UNIT] = "";
+    expect(await doctor()).toBe(1);
+    expect(text()).toContain("! family: couldn't measure when its unit started");
   });
 });
