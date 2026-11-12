@@ -46,7 +46,7 @@ export async function hasData(dir: string): Promise<boolean> {
 }
 
 /** Free bytes where `path` lives, from `df -Pk`. */
-async function freeBytes(ctx: Context, path: string): Promise<number> {
+export async function freeBytes(ctx: Context, path: string): Promise<number> {
   const res = await ctx.runner.run("df", ["-Pk", path]);
   const kb = Number(res.stdout.split("\n")[1]?.trim().split(/\s+/)[3]);
   if (res.code !== 0 || !Number.isFinite(kb)) {

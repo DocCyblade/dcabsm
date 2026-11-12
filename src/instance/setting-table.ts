@@ -166,11 +166,16 @@ export function bodyLimitMb(settings: Record<string, SettingValue> | undefined):
   return Math.max(...UPLOAD_SETTINGS.map((d) => effectiveMb(d, settings))) + 1;
 }
 
-/** Names the settings the Release can't use (spec 4.11): the record keeps them for a later Upgrade. */
+/** The keys of the settings in the record that the Release can't use (spec 4.11): the record keeps them for a later Upgrade. */
+export function unusedSettings(record: InstanceRecord, release: string): string[] {
+  return SETTINGS.filter(
+    (def) => record.settings?.[def.key] !== undefined && !usedBy(def, release),
+  ).map((def) => def.key);
+}
+
+/** Names the settings the Release can't use. */
 export function reportUnusedSettings(ctx: Context, record: InstanceRecord, release: string): void {
-  for (const def of SETTINGS) {
-    if (record.settings?.[def.key] !== undefined && !usedBy(def, release)) {
-      step(ctx, "info", `${def.key}: not used by ${release}`);
-    }
+  for (const key of unusedSettings(record, release)) {
+    step(ctx, "info", `${key}: not used by ${release}`);
   }
 }
